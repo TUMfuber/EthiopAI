@@ -5,6 +5,7 @@ import { fetchVerraProjects } from "./scrapers/verra.js";
 import { fetchGoldStandardProjects } from "./scrapers/goldstandard.js";
 import { fetchACRProjects } from "./scrapers/acr.js";
 import { fetchPlanVivoProjects } from "./scrapers/planvivo.js";
+import { fetchBerkeleyProjects } from "./scrapers/berkeley.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = join(__dirname, "..", "output");
@@ -28,6 +29,7 @@ async function main() {
     scrape("Gold Standard", fetchGoldStandardProjects),
     scrape("ACR", fetchACRProjects),
     scrape("Plan Vivo", fetchPlanVivoProjects),
+    scrape("Berkeley DB", fetchBerkeleyProjects),
   ]);
 
   const all = results.flat();
