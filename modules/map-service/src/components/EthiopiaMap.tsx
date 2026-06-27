@@ -5,13 +5,14 @@ import { GeoJSON, MapContainer, TileLayer } from 'react-leaflet';
 import PriorityOverlays, { type PriorityZones } from './PriorityOverlays';
 import ProjectMarkers, { type Project } from './ProjectMarkers';
 
-type MapMode = 'standard' | 'satellite' | 'biodiversity' | 'livelihood';
+type MapMode = 'standard' | 'satellite' | 'biodiversity' | 'livelihood' | 'administrative';
 
 const MODES: { id: MapMode; label: string; icon: string }[] = [
-  { id: 'standard',     label: 'Standard',     icon: '🗺️' },
-  { id: 'satellite',    label: 'Satellite',    icon: '🛰️' },
-  { id: 'biodiversity', label: 'Biodiversity', icon: '🌿' },
-  { id: 'livelihood',   label: 'Livelihood',   icon: '🌾' },
+  { id: 'standard',       label: 'Standard',       icon: '🗺️' },
+  { id: 'administrative', label: 'Administrative', icon: '🏛️' },
+  { id: 'satellite',      label: 'Satellite',      icon: '🛰️' },
+  { id: 'biodiversity',   label: 'Biodiversity',   icon: '🌿' },
+  { id: 'livelihood',     label: 'Livelihood',     icon: '🌾' },
 ];
 
 // Placeholder: all modes use OSM until real layers are wired up
@@ -31,6 +32,10 @@ const TILE_LAYERS: Record<MapMode, { url: string; attribution: string }> = {
   livelihood: {
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenStreetMap contributors | Ethiopia boundary: geoBoundaries',
+  },
+  administrative: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors | Admin boundaries: geoBoundaries',
   },
 };
 
@@ -82,7 +87,9 @@ interface EthiopiaMapProps {
 
 export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProps) {
   const [boundary, setBoundary] = useState<any>(null);
+  const [adminBoundary, setAdminBoundary] = useState<any>(null);
   const [mode, setMode] = useState<MapMode>('standard');
+  const [selectedRegions, setSelectedRegions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch('/data/ethiopia-boundary.geojson')
@@ -91,17 +98,51 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
       .catch((e) => console.error('Failed to load Ethiopia boundary:', e));
   }, []);
 
+  useEffect(() => {
+    if (mode !== 'administrative' || adminBoundary) return;
+    fetch('/data/ethiopia-admin.geojson')
+      .then((r) => r.json())
+      .then((data) => {
+        setAdminBoundary(data);
+        // select all regions by default
+        const names: string[] = data.features.map((f: any) => f.properties?.shapeName ?? '');
+        setSelectedRegions(new Set(names));
+      })
+      .catch((e) => console.error('Failed to load admin boundary:', e));
+  }, [mode, adminBoundary]);
+
   const outsideMask = useMemo(
     () => (boundary ? createOutsideEthiopiaMask(boundary) : null),
     [boundary]
   );
+
+  const regionNames: string[] = useMemo(
+    () => adminBoundary?.features.map((f: any) => f.properties?.shapeName ?? '') ?? [],
+    [adminBoundary]
+  );
+
+  const allSelected = regionNames.length > 0 && regionNames.every((n) => selectedRegions.has(n));
+
+  function toggleRegion(name: string) {
+    setSelectedRegions((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allSelected) setSelectedRegions(new Set());
+    else setSelectedRegions(new Set(regionNames));
+  }
 
   const tile = TILE_LAYERS[mode];
 
   return (
     <section className="map-shell" aria-label="Map of Ethiopia" style={{ position: 'relative' }}>
 
-      {/* Mode switcher — top-right, above Leaflet (z-index > 400) */}
+      {/* Mode switcher — top-right */}
       <div style={{
         position: 'absolute',
         top: 16,
@@ -140,6 +181,67 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
         ))}
       </div>
 
+      {/* Region selector — top-left, only in administrative mode */}
+      {mode === 'administrative' && regionNames.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 16,
+          left: 16,
+          zIndex: 1000,
+          background: 'white',
+          borderRadius: 10,
+          padding: '10px 12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+          maxHeight: 'calc(100vh - 80px)',
+          overflowY: 'auto',
+          minWidth: 170,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 600, fontSize: 13, color: '#111827' }}>
+              Regions
+            </span>
+            <button
+              onClick={toggleAll}
+              style={{
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontSize: 11,
+                color: '#16a34a',
+                fontFamily: 'system-ui, sans-serif',
+                padding: '2px 4px',
+              }}
+            >
+              {allSelected ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+          {regionNames.map((name) => (
+            <label
+              key={name}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '3px 0',
+                cursor: 'pointer',
+                fontFamily: 'system-ui, sans-serif',
+                fontSize: 12,
+                color: '#374151',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedRegions.has(name)}
+                onChange={() => toggleRegion(name)}
+                style={{ accentColor: '#16a34a', cursor: 'pointer' }}
+              />
+              {name}
+            </label>
+          ))}
+        </div>
+      )}
+
       <MapContainer
         center={ETHIOPIA_CENTER}
         zoom={6}
@@ -150,8 +252,31 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
         scrollWheelZoom={true}
         className="ethiopia-map"
       >
-        {/* key forces Leaflet to remount the tile layer when mode changes */}
         <TileLayer key={mode} attribution={tile.attribution} url={tile.url} />
+
+        {/* Administrative regions — one GeoJSON per region so style updates independently */}
+        {mode === 'administrative' && adminBoundary &&
+          adminBoundary.features.map((feature: any) => {
+            const name: string = feature.properties?.shapeName ?? '';
+            const active = selectedRegions.has(name);
+            return (
+              <GeoJSON
+                key={`${name}-${active}`}
+                data={feature}
+                interactive={true}
+                style={{
+                  color: '#374151',
+                  weight: 1.5,
+                  fillColor: active ? '#ffffff' : '#111827',
+                  fillOpacity: active ? 0.05 : 0.75,
+                }}
+                onEachFeature={(_, layer) => {
+                  layer.bindTooltip(name, { permanent: false, direction: 'center' });
+                }}
+              />
+            );
+          })
+        }
 
         {outsideMask && (
           <GeoJSON
@@ -161,7 +286,7 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
           />
         )}
 
-        {boundary && (
+        {boundary && mode !== 'administrative' && (
           <GeoJSON
             data={boundary}
             interactive={false}
