@@ -6,7 +6,8 @@
   "scripts": {
     "scrape": "node src/scrape.js",
     "enrich": "node src/enrich.js",
-    "all": "node src/scrape.js && node src/enrich.js"
+    "research": "node src/ai-research.js",
+    "all": "node src/scrape.js && node src/ai-research.js && node src/enrich.js"
   },
   "dependencies": {
     "dotenv": "16.4.7",
