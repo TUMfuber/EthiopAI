@@ -39,6 +39,12 @@ export interface ClusterLayerConfig {
   flyPadding?: [number, number];
   /** How cluster bubble colour is derived from point weights. */
   clusterColorMode?: ClusterColorMode;
+  /**
+   * Zoom ranges per level. Entry N defines the zoom band where depth-N clusters
+   * are shown; the last entry is the leaf / individual-points band.
+   * Defaults to LEVELS. Length must match the tree's maxDepth + 1.
+   */
+  levels?: { minZoom: number; maxZoom: number }[];
 }
 
 // ── Level configuration ───────────────────────────────────────────────────────
@@ -76,11 +82,11 @@ function getVisible(
   });
 }
 
-/** Map the current zoom to an index into LEVELS. */
-function zoomToLevelIdx(zoom: number): number {
-  if (zoom < LEVELS[0].minZoom) return 0;
-  const idx = LEVELS.findIndex((l) => zoom >= l.minZoom && zoom <= l.maxZoom);
-  return idx === -1 ? LEVELS.length - 1 : idx;
+/** Map the current zoom to an index into a levels array. */
+function zoomToLevelIdx(zoom: number, levels: { minZoom: number; maxZoom: number }[]): number {
+  if (zoom < levels[0].minZoom) return 0;
+  const idx = levels.findIndex((l) => zoom >= l.minZoom && zoom <= l.maxZoom);
+  return idx === -1 ? levels.length - 1 : idx;
 }
 
 // ── Cluster icon ──────────────────────────────────────────────────────────────
@@ -120,6 +126,7 @@ export default function ClusterLayer({
   flyDuration = 0.8,
   flyPadding = [60, 60],
   clusterColorMode = 'average',
+  levels = LEVELS,
 }: ClusterLayerProps) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
@@ -128,23 +135,22 @@ export default function ClusterLayer({
     if (clusterColorMode === 'uniform') return clusterColor;
     if (clusterColorMode === 'peak')
       return node.maxWeight != null ? weightToColor(node.maxWeight) : clusterColor;
-    // 'average'
     return node.weight != null ? weightToColor(node.weight) : clusterColor;
   }
 
   useMapEvent('zoomend', () => setZoom(map.getZoom()));
 
-  const levelIdx = useMemo(() => zoomToLevelIdx(zoom), [zoom]);
+  const levelIdx = useMemo(() => zoomToLevelIdx(zoom, levels), [zoom, levels]);
   const visible  = useMemo(() => getVisible(nodes, levelIdx), [nodes, levelIdx]);
 
   function handleClusterClick(cluster: ClusterNode) {
     if (!cluster.bounds) return;
     const nextIdx = cluster.depth + 1;
-    if (nextIdx >= LEVELS.length) return;
+    if (nextIdx >= levels.length) return;
 
     const { minLat, minLng, maxLat, maxLng } = cluster.bounds;
     const bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
-    const { minZoom, maxZoom } = LEVELS[nextIdx];
+    const { minZoom, maxZoom } = levels[nextIdx];
 
     // Zoom to fit the cluster's area, clamped to the next level's zoom range
     const fitZoom   = Math.floor(map.getBoundsZoom(bounds));
