@@ -46,67 +46,45 @@ async function enrichProject(project) {
 }
 
 async function geocodeProject(project) {
-  // Search DuckDuckGo for the real project URL
-  const searchQuery = `${project.name} ${project.organization || ""} ${project.registry || ""} carbon project`;
-  let realUrl = "";
+  let geo = { lat: null, lng: null, projectUrl: "" };
 
+  // Step 1: DuckDuckGo search for real URL
   try {
+    const searchQuery = `${project.name} ${project.organization || ""} ${project.registry || ""} carbon project Ethiopia`;
     const searchRes = await fetch(
       `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`,
       { headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" } }
     );
     if (searchRes.ok) {
       const html = await searchRes.text();
-      // DuckDuckGo results have links in <a class="result__a" href="...">
       const urlMatches = html.match(/href="https?:\/\/(?!duckduckgo\.com)[^"]+"/g);
       if (urlMatches && urlMatches.length > 0) {
-        realUrl = urlMatches[0].replace('href="', "").replace('"', "");
-        // DDG sometimes wraps URLs in redirects
+        let realUrl = urlMatches[0].replace('href="', "").replace('"', "");
         if (realUrl.includes("uddg=")) {
-          const decoded = decodeURIComponent(realUrl.split("uddg=")[1]);
-          realUrl = decoded.split("&")[0];
+          realUrl = decodeURIComponent(realUrl.split("uddg=")[1]).split("&")[0];
         }
+        geo.projectUrl = realUrl;
       }
     }
   } catch (e) {}
 
-  // Use OpenAI with web search to get verified coordinates and URL
-  const res = await client.responses.create({
-    model: "gpt-4o-mini",
-    tools: [{ type: "web_search_preview" }],
-    input: `Find the exact location (latitude, longitude) and official project page URL for this carbon/ecology project in Ethiopia:
-Name: ${project.name}
-Organization: ${project.organization || "unknown"}
-Registry: ${project.registry || "unknown"}
-
-Return ONLY a JSON object with: {"lat": number, "lng": number, "projectUrl": "verified URL"}
-Coordinates must be in Ethiopia (lat 3.4-14.9, lng 33.0-48.0).
-For the URL, find the actual registry page or official project website.`,
-  });
-
-  let geo = { lat: null, lng: null, projectUrl: "" };
+  // Step 2: AI geocode with the found URL as context
   try {
-    const content = res.output_text || "";
-    const jsonMatch = content.match(/\{[^}]+\}/);
-    if (jsonMatch) geo = JSON.parse(jsonMatch[0]);
-  } catch (e) {
-    // Fallback to basic geocode
-    const fallback = await client.chat.completions.create({
+    const res = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: GEOCODE_PROMPT },
-        { role: "user", content: JSON.stringify({ name: project.name, organization: project.organization, type: project.type, registry: project.registry }) },
+        { role: "user", content: JSON.stringify({ name: project.name, organization: project.organization, type: project.type, registry: project.registry, foundUrl: geo.projectUrl || "none" }) },
       ],
       response_format: { type: "json_object" },
       max_tokens: 150,
     });
-    geo = JSON.parse(fallback.choices[0].message.content);
-  }
+    const fb = JSON.parse(res.choices[0].message.content);
+    geo.lat = fb.lat;
+    geo.lng = fb.lng;
+    if (!geo.projectUrl && fb.projectUrl) geo.projectUrl = fb.projectUrl;
+  } catch (e) {}
 
-  // Prefer web-scraped URL if OpenAI didn't find one
-  if ((!geo.projectUrl || geo.projectUrl.length < 10) && realUrl) {
-    geo.projectUrl = realUrl;
-  }
   return geo;
 }
 
@@ -148,8 +126,16 @@ async function main() {
     }
   }
 
-  writeFileSync(OUTPUT, JSON.stringify(enriched, null, 2));
-  console.log(`\nSaved ${enriched.length} enriched projects to output/projects.json`);
+  // Filter out projects that have no coordinates and no valid URL
+  const valid = enriched.filter((p) => {
+    if (p.lat && p.lng) return true;
+    // No coordinates — drop it
+    console.log(`  ⊘ Dropping "${p.name}" — no verified location`);
+    return false;
+  });
+
+  writeFileSync(OUTPUT, JSON.stringify(valid, null, 2));
+  console.log(`\nSaved ${valid.length} verified projects to output/projects.json (dropped ${enriched.length - valid.length})`);
 }
 
 main().catch(console.error);
