@@ -1,3 +1,5 @@
+import puppeteer from "puppeteer";
+
 const VERRA_SEARCH = "https://registry.verra.org/uiapi/resource/resource/search?$top=500&count=true";
 const VERRA_DETAIL = "https://registry.verra.org/uiapi/resource/resourceSummary";
 
@@ -47,11 +49,12 @@ export async function fetchVerraProjects() {
 
   console.log(`  Verra: ${records.length} Ethiopia projects found, fetching coordinates...`);
 
-  // Fetch detail for each project to get lat/lng
+  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+
   const projects = [];
   for (const r of records) {
     const id = r.resourceIdentifier || r.id;
-    const coords = await fetchProjectCoords(id);
+    const coords = await fetchProjectCoords(id, browser);
     projects.push({
       id,
       name: r.resourceName || r.name || "",
@@ -72,26 +75,31 @@ export async function fetchVerraProjects() {
     });
   }
 
+  await browser.close();
   return projects;
 }
 
-async function fetchProjectCoords(projectId) {
+async function fetchProjectCoords(projectId, browser) {
   try {
-    const url = `https://registry.verra.org/app/projectDetail/VCS/${projectId}`;
-    const res = await fetch(url);
-    if (!res.ok) return { lat: null, lng: null };
-
-    const html = await res.text();
-    // Extract coords from Azure Maps feedback URL: cp={lat}~{lng}
-    const match = html.match(/cp=([-\d.]+)~([-\d.]+)/);
-    if (match) {
-      const lat = parseFloat(match[1]);
-      const lng = parseFloat(match[2]);
-      console.log(`    ✓ ${projectId}: ${lat}, ${lng}`);
-      return { lat, lng };
+    const page = await browser.newPage();
+    await page.goto(`https://registry.verra.org/app/projectDetail/VCS/${projectId}`, {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+    // Wait for the Azure Maps feedback link to render
+    await page.waitForSelector('a[href*="azuremaps-feedback"]', { timeout: 15000 }).catch(() => {});
+    const coords = await page.evaluate(() => {
+      const link = document.querySelector('a[href*="azuremaps-feedback"]');
+      if (!link) return null;
+      const match = link.href.match(/cp=([-\d.]+)~([-\d.]+)/);
+      return match ? { lat: parseFloat(match[1]), lng: parseFloat(match[2]) } : null;
+    });
+    await page.close();
+    if (coords) {
+      console.log(`    ✓ ${projectId}: ${coords.lat}, ${coords.lng}`);
+      return coords;
     }
   } catch (e) {}
-
   console.log(`    ✗ ${projectId}: no coordinates found`);
   return { lat: null, lng: null };
 }
