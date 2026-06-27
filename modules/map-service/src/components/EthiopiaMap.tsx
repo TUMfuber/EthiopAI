@@ -182,17 +182,17 @@ function extractLeaves(nodes: Array<ClusterNode | LeafNode>): LeafNode[] {
 
 // ── Raw points layer (Points mode) ────────────────────────────────────────────
 
-const POINTS_MIN_ZOOM = 9;
-
-function RawPointsLayer({ leaves, color = '#1d4ed8', radius = 5 }: {
+function RawPointsLayer({ leaves, color = '#1d4ed8', radius = 5, minZoom = 9 }: {
   leaves: LeafNode[];
   color?: string;
   radius?: number;
+  /** Minimum map zoom at which individual points are rendered. */
+  minZoom?: number;
 }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
   useMapEvent('zoomend', () => setZoom(map.getZoom()));
-  if (zoom < POINTS_MIN_ZOOM) return null;
+  if (zoom < minZoom) return null;
   return (
     <>
       {leaves.map((node) => (
