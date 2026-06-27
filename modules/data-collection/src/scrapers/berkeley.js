@@ -19,8 +19,30 @@ export async function fetchBerkeleyProjects() {
 
   const sheetName = workbook.SheetNames.find((s) => s.toLowerCase().includes("project")) || workbook.SheetNames[1];
   const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet);
-  console.log(`  Berkeley DB: ${rows.length} rows from "${sheetName}"`);
+
+  // The sheet has metadata rows before actual headers - find the header row
+  const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // raw arrays
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(10, allRows.length); i++) {
+    const row = (allRows[i] || []).map((c) => String(c).toLowerCase());
+    if (row.some((c) => c.includes("project id") || c.includes("project name"))) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  console.log(`  Berkeley DB: header row at index ${headerIdx}`);
+  const headers = allRows[headerIdx].map((h) => String(h).trim());
+  const dataRows = allRows.slice(headerIdx + 1);
+
+  // Convert to objects using discovered headers
+  const rows = dataRows.map((row) => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
+    return obj;
+  }).filter((r) => Object.values(r).some((v) => v !== ""));
+
+  console.log(`  Berkeley DB: ${rows.length} data rows from "${sheetName}", headers: ${headers.slice(0, 5).join(", ")}...`);
 
   const SQL = await initSqlJs();
   const db = new SQL.Database();
