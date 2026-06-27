@@ -1,53 +1,27 @@
 import puppeteer from "puppeteer";
 
 const VERRA_SEARCH = "https://registry.verra.org/uiapi/resource/resource/search?$top=500&count=true";
-const VERRA_DETAIL = "https://registry.verra.org/uiapi/resource/resourceSummary";
+
+// All Verra programs to search
+const PROGRAMS = ["VCS", "CCB", "SD_VISTA", "PLASTIC"];
 
 export async function fetchVerraProjects() {
-  const bodies = [
-    { program: "VCS", country_area: "Ethiopia" },
-    { program: "VCS", "country/area": "Ethiopia" },
-    { program: "VCS", countryName: "Ethiopia" },
-  ];
+  let allRecords = [];
 
-  let records = [];
-
-  for (const body of bodies) {
-    const res = await fetch(VERRA_SEARCH, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) continue;
-    const data = await res.json();
-    const all = data.value || data.records || data || [];
-    const ethRecords = all.filter((r) => {
-      const fields = [r.country, r.countryName, r.country_area, r.region, r.resourceName, r.name].join(" ").toLowerCase();
-      return fields.includes("ethiopia");
-    });
-    if (ethRecords.length > 0) {
-      records = ethRecords;
-      break;
+  for (const program of PROGRAMS) {
+    const records = await searchProgram(program);
+    if (records.length > 0) {
+      console.log(`  Verra ${program}: ${records.length} Ethiopia projects`);
+      allRecords.push(...records.map((r) => ({ ...r, _program: program })));
     }
   }
 
-  if (records.length === 0) {
-    // Fallback: fetch all and filter
-    const res = await fetch(VERRA_SEARCH.replace("500", "5000"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ program: "VCS" }),
-    });
-    if (!res.ok) throw new Error(`Verra API error: ${res.status}`);
-    const data = await res.json();
-    const all = data.value || data.records || data || [];
-    records = all.filter((r) => {
-      const fields = [r.country, r.countryName, r.country_area, r.region, r.resourceName, r.name].join(" ").toLowerCase();
-      return fields.includes("ethiopia");
-    });
+  if (allRecords.length === 0) {
+    console.log("  Verra: no Ethiopia projects found in any program");
+    return [];
   }
 
-  console.log(`  Verra: ${records.length} Ethiopia projects found, fetching coordinates...`);
+  console.log(`  Verra: ${allRecords.length} total Ethiopia projects, fetching coordinates...`);
 
   const browser = await puppeteer.launch({
     headless: true,
@@ -56,9 +30,10 @@ export async function fetchVerraProjects() {
   });
 
   const projects = [];
-  for (const r of records) {
+  for (const r of allRecords) {
     const id = r.resourceIdentifier || r.id;
-    const coords = await fetchProjectCoords(id, browser);
+    const program = r._program;
+    const coords = await fetchProjectCoords(id, program, browser);
     projects.push({
       id,
       name: r.resourceName || r.name || "",
@@ -68,14 +43,14 @@ export async function fetchVerraProjects() {
       description: "",
       organization: r.proponentName || r.developer || "",
       status: r.statusName || r.status || "",
-      registry: "Verra_VCS",
+      registry: `Verra_${program}`,
       registryId: String(id),
       methodology: r.methodology || "",
       creditsIssued: r.totalVCUsIssued ?? r.totalCreditsIssued ?? 0,
       creditingPeriodStart: r.creditingPeriodStartDate || "",
       creditingPeriodEnd: r.creditingPeriodEndDate || "",
       sdgContributions: [],
-      projectUrl: `https://registry.verra.org/app/projectDetail/VCS/${id}`,
+      projectUrl: `https://registry.verra.org/app/projectDetail/${program}/${id}`,
     });
   }
 
@@ -83,14 +58,59 @@ export async function fetchVerraProjects() {
   return projects;
 }
 
-async function fetchProjectCoords(projectId, browser) {
+async function searchProgram(program) {
+  const bodies = [
+    { program, country_area: "Ethiopia" },
+    { program, "country/area": "Ethiopia" },
+    { program, countryName: "Ethiopia" },
+  ];
+
+  for (const body of bodies) {
+    try {
+      const res = await fetch(VERRA_SEARCH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const all = data.value || data.records || data || [];
+      const ethRecords = all.filter((r) => {
+        const fields = [r.country, r.countryName, r.country_area, r.region, r.resourceName, r.name].join(" ").toLowerCase();
+        return fields.includes("ethiopia");
+      });
+      if (ethRecords.length > 0) return ethRecords;
+    } catch (e) {
+      continue;
+    }
+  }
+
+  // Fallback: fetch all for this program and filter
+  try {
+    const res = await fetch(VERRA_SEARCH.replace("500", "5000"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ program }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const all = data.value || data.records || data || [];
+    return all.filter((r) => {
+      const fields = [r.country, r.countryName, r.country_area, r.region, r.resourceName, r.name].join(" ").toLowerCase();
+      return fields.includes("ethiopia");
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+async function fetchProjectCoords(projectId, program, browser) {
   try {
     const page = await browser.newPage();
-    await page.goto(`https://registry.verra.org/app/projectDetail/VCS/${projectId}`, {
+    await page.goto(`https://registry.verra.org/app/projectDetail/${program}/${projectId}`, {
       waitUntil: "networkidle2",
       timeout: 30000,
     });
-    // Wait for the Azure Maps feedback link to render
     await page.waitForSelector('a[href*="azuremaps-feedback"]', { timeout: 15000 }).catch(() => {});
     const coords = await page.evaluate(() => {
       const link = document.querySelector('a[href*="azuremaps-feedback"]');
