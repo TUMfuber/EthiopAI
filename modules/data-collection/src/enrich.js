@@ -46,43 +46,67 @@ async function enrichProject(project) {
 }
 
 async function geocodeProject(project) {
-  // First: search the web for the real project URL
-  const searchQuery = `${project.name} ${project.organization || ""} ${project.registry || ""} carbon credit project`;
+  // Search DuckDuckGo for the real project URL
+  const searchQuery = `${project.name} ${project.organization || ""} ${project.registry || ""} carbon project`;
   let realUrl = "";
 
   try {
     const searchRes = await fetch(
-      `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&num=3`,
+      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`,
       { headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" } }
     );
     if (searchRes.ok) {
       const html = await searchRes.text();
-      // Extract first real URL from Google results
-      const urlMatches = html.match(/https?:\/\/(?:www\.)?(?!google\.com|gstatic|googleapis)[^\s"<>]+/g);
+      // DuckDuckGo results have links in <a class="result__a" href="...">
+      const urlMatches = html.match(/href="https?:\/\/(?!duckduckgo\.com)[^"]+"/g);
       if (urlMatches && urlMatches.length > 0) {
-        realUrl = urlMatches[0].replace(/&amp;/g, "&").split("&")[0];
+        realUrl = urlMatches[0].replace('href="', "").replace('"', "");
+        // DDG sometimes wraps URLs in redirects
+        if (realUrl.includes("uddg=")) {
+          const decoded = decodeURIComponent(realUrl.split("uddg=")[1]);
+          realUrl = decoded.split("&")[0];
+        }
       }
     }
   } catch (e) {}
 
-  const res = await client.chat.completions.create({
+  // Use OpenAI with web search to get verified coordinates and URL
+  const res = await client.responses.create({
     model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: GEOCODE_PROMPT },
-      { role: "user", content: JSON.stringify({
-        name: project.name,
-        organization: project.organization,
-        type: project.type,
-        registry: project.registry,
-        webSearchResult: realUrl || "no result found",
-      }) },
-    ],
-    response_format: { type: "json_object" },
-    max_tokens: 150,
+    tools: [{ type: "web_search_preview" }],
+    input: `Find the exact location (latitude, longitude) and official project page URL for this carbon/ecology project in Ethiopia:
+Name: ${project.name}
+Organization: ${project.organization || "unknown"}
+Registry: ${project.registry || "unknown"}
+
+Return ONLY a JSON object with: {"lat": number, "lng": number, "projectUrl": "verified URL"}
+Coordinates must be in Ethiopia (lat 3.4-14.9, lng 33.0-48.0).
+For the URL, find the actual registry page or official project website.`,
   });
-  const geo = JSON.parse(res.choices[0].message.content);
-  // Prefer web-scraped URL over AI-generated one
-  if (realUrl && realUrl.length > 10) geo.projectUrl = realUrl;
+
+  let geo = { lat: null, lng: null, projectUrl: "" };
+  try {
+    const content = res.output_text || "";
+    const jsonMatch = content.match(/\{[^}]+\}/);
+    if (jsonMatch) geo = JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    // Fallback to basic geocode
+    const fallback = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: GEOCODE_PROMPT },
+        { role: "user", content: JSON.stringify({ name: project.name, organization: project.organization, type: project.type, registry: project.registry }) },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 150,
+    });
+    geo = JSON.parse(fallback.choices[0].message.content);
+  }
+
+  // Prefer web-scraped URL if OpenAI didn't find one
+  if ((!geo.projectUrl || geo.projectUrl.length < 10) && realUrl) {
+    geo.projectUrl = realUrl;
+  }
   return geo;
 }
 
