@@ -46,16 +46,44 @@ async function enrichProject(project) {
 }
 
 async function geocodeProject(project) {
+  // First: search the web for the real project URL
+  const searchQuery = `${project.name} ${project.organization || ""} ${project.registry || ""} carbon credit project`;
+  let realUrl = "";
+
+  try {
+    const searchRes = await fetch(
+      `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&num=3`,
+      { headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" } }
+    );
+    if (searchRes.ok) {
+      const html = await searchRes.text();
+      // Extract first real URL from Google results
+      const urlMatches = html.match(/https?:\/\/(?:www\.)?(?!google\.com|gstatic|googleapis)[^\s"<>]+/g);
+      if (urlMatches && urlMatches.length > 0) {
+        realUrl = urlMatches[0].replace(/&amp;/g, "&").split("&")[0];
+      }
+    }
+  } catch (e) {}
+
   const res = await client.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: GEOCODE_PROMPT },
-      { role: "user", content: JSON.stringify({ name: project.name, organization: project.organization, type: project.type, registry: project.registry }) },
+      { role: "user", content: JSON.stringify({
+        name: project.name,
+        organization: project.organization,
+        type: project.type,
+        registry: project.registry,
+        webSearchResult: realUrl || "no result found",
+      }) },
     ],
     response_format: { type: "json_object" },
     max_tokens: 150,
   });
-  return JSON.parse(res.choices[0].message.content);
+  const geo = JSON.parse(res.choices[0].message.content);
+  // Prefer web-scraped URL over AI-generated one
+  if (realUrl && realUrl.length > 10) geo.projectUrl = realUrl;
+  return geo;
 }
 
 async function main() {
