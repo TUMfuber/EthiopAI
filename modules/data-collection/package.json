@@ -4,6 +4,7 @@
   "description": "Scrapes carbon credit registries for Ethiopian NGO/ecological projects",
   "type": "module",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
     "scrape": "node src/scrape.js",
     "enrich": "node src/enrich.js",
     "research": "node src/ai-research.js",
