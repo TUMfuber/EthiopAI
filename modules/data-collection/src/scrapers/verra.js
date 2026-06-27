@@ -76,43 +76,21 @@ export async function fetchVerraProjects() {
 }
 
 async function fetchProjectCoords(projectId) {
-  // Try the project detail/summary endpoint
-  const urls = [
-    `https://registry.verra.org/uiapi/resource/resourceSummary/${projectId}`,
-    `https://registry.verra.org/uiapi/resource/resource/${projectId}`,
-  ];
+  try {
+    const url = `https://registry.verra.org/app/projectDetail/VCS/${projectId}`;
+    const res = await fetch(url);
+    if (!res.ok) return { lat: null, lng: null };
 
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) continue;
-      const ct = res.headers.get("content-type") || "";
-      if (!ct.includes("json")) continue;
-
-      const data = await res.json();
-      // Look for coordinates in various possible locations
-      const lat = data.latitude ?? data.lat ?? data.geoLocation?.latitude ?? data.location?.lat ?? null;
-      const lng = data.longitude ?? data.lng ?? data.lon ?? data.geoLocation?.longitude ?? data.location?.lng ?? null;
-
-      if (lat && lng) {
-        console.log(`    ✓ ${projectId}: ${lat}, ${lng}`);
-        return { lat, lng };
-      }
-
-      // Check for nested location/map data
-      if (data.mapData || data.coordinates || data.geographicLocation) {
-        const geo = data.mapData || data.coordinates || data.geographicLocation;
-        if (geo.latitude && geo.longitude) {
-          console.log(`    ✓ ${projectId}: ${geo.latitude}, ${geo.longitude}`);
-          return { lat: geo.latitude, lng: geo.longitude };
-        }
-      }
-    } catch (e) {
-      continue;
+    const html = await res.text();
+    // Extract coords from Azure Maps feedback URL: cp={lat}~{lng}
+    const match = html.match(/cp=([-\d.]+)~([-\d.]+)/);
+    if (match) {
+      const lat = parseFloat(match[1]);
+      const lng = parseFloat(match[2]);
+      console.log(`    ✓ ${projectId}: ${lat}, ${lng}`);
+      return { lat, lng };
     }
-  }
+  } catch (e) {}
 
   console.log(`    ✗ ${projectId}: no coordinates found`);
   return { lat: null, lng: null };
