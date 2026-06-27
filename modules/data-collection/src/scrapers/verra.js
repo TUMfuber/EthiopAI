@@ -1,23 +1,20 @@
-const VERRA_API = "https://registry.verra.org/uiapi/resource/resourceSummary";
+const VERRA_API = "https://registry.verra.org/uiapi/resource/resource/search?$skip=0&$top=100&count=true";
 
 export async function fetchVerraProjects() {
-  const body = {
-    program: "VCS",
-    countryName: "Ethiopia",
-    statusName: "",
-    isFetchAllData: true,
-  };
-
   const res = await fetch(VERRA_API, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      program: "VCS",
+      countryName: "Ethiopia",
+    }),
   });
 
   if (!res.ok) throw new Error(`Verra API error: ${res.status}`);
   const data = await res.json();
+  const records = data.value || data.records || data || [];
 
-  return (data.records || data || []).map((r) => ({
+  return records.map((r) => ({
     id: r.resourceIdentifier || r.id,
     name: r.resourceName || r.name || "",
     lat: r.latitude ?? null,
@@ -29,7 +26,7 @@ export async function fetchVerraProjects() {
     registry: "Verra_VCS",
     registryId: String(r.resourceIdentifier || r.id),
     methodology: r.methodology || "",
-    creditsIssued: r.totalCreditsIssued ?? r.creditsIssued ?? 0,
+    creditsIssued: r.totalVCUsIssued ?? r.totalCreditsIssued ?? 0,
     creditingPeriodStart: r.creditingPeriodStartDate || "",
     creditingPeriodEnd: r.creditingPeriodEndDate || "",
     sdgContributions: [],
