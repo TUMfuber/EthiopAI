@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { readFileSync, writeFileSync } from "fs";
 import OpenAI from "openai";
 
