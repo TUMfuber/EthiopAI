@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const EthiopiaMap = dynamic(
-  () => import('../components/map/EthiopiaMap').then((mod) => mod.default),
+  () => import('../modules/map-service/src/components/EthiopiaMap').then((mod) => mod.default),
   {
     ssr: false,
     loading: () => <div className="map-loading">Loading map...</div>,
