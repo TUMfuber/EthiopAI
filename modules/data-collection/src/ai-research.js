@@ -78,7 +78,7 @@ async function main() {
     const existing = JSON.parse(readFileSync(rawPath, "utf-8"));
     const existingNames = new Set(existing.map((p) => p.name.toLowerCase()));
     const newProjects = projects.filter((p) => !existingNames.has(p.name.toLowerCase()));
-    const merged = [...existing, ...newProjects];
+    const merged = [...existing, ...newProjects.map((p) => ({ ...p, source: "ai-research" }))];
     writeFileSync(rawPath, JSON.stringify(merged, null, 2));
     console.log(`Merged ${newProjects.length} new projects into raw-projects.json (total: ${merged.length})`);
   }
