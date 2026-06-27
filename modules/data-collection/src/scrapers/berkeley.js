@@ -2,10 +2,11 @@ import XLSX from "xlsx";
 import initSqlJs from "sql.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { writeFileSync } from "fs";
+import { writeFileSync, mkdirSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, "..", "output", "berkeley.db");
+const OUTPUT_DIR = join(__dirname, "..", "..", "output");
+const DB_PATH = join(OUTPUT_DIR, "berkeley.db");
 const BERKELEY_URL = "https://gspp.berkeley.edu/assets/uploads/page/Voluntary-Registry-Offsets-Database--v2026-04.xlsx";
 
 export async function fetchBerkeleyProjects() {
@@ -57,6 +58,7 @@ export async function fetchBerkeleyProjects() {
   stmt.free();
 
   // Save DB file
+  mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(DB_PATH, Buffer.from(db.export()));
   console.log(`  Berkeley DB: SQLite saved to output/berkeley.db`);
 
