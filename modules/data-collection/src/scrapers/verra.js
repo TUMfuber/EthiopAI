@@ -49,7 +49,11 @@ export async function fetchVerraProjects() {
 
   console.log(`  Verra: ${records.length} Ethiopia projects found, fetching coordinates...`);
 
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium-browser",
+  });
 
   const projects = [];
   for (const r of records) {
