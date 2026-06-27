@@ -1,5 +1,11 @@
 export { default as EthiopiaMap } from './components/EthiopiaMap';
 export { default as PriorityOverlays } from './components/PriorityOverlays';
 export { default as ProjectMarkers } from './components/ProjectMarkers';
+export { default as RawLayerRenderer } from './components/RawLayerRenderer';
+export { default as EthopaiLayerRenderer } from './components/EthopaiLayerRenderer';
+export { RAW_LAYERS } from './layers/rawLayers';
+export { DEFAULT_ETHOPAI_LAYER_ID, ETHOPAI_LAYERS } from './layers/ethopaiLayers';
 export type { PriorityZones } from './components/PriorityOverlays';
 export type { Project } from './components/ProjectMarkers';
+export type { RawLayerConfig, RawLayerKind, RawLayerLegendItem } from './layers/rawLayers';
+export type { EthopaiLayerConfig } from './layers/ethopaiLayers';

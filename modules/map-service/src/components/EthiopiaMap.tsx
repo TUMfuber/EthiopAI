@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, useMap, useMapEvent } from 'react-leaflet';
 import ClusterLayer, { type ClusterColorMode, type ClusterNode, type LeafNode, weightToColor } from './ClusterLayer';
+import EthopaiLayerRenderer from './EthopaiLayerRenderer';
 import { buildEthiopiaExample } from './ethiopiaExample';
 import PriorityOverlays, { type PriorityZones } from './PriorityOverlays';
 import ProjectMarkers, { type Project } from './ProjectMarkers';
+import RawLayerRenderer from './RawLayerRenderer';
+import { DEFAULT_ETHOPAI_LAYER_ID, ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
+import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
 
 // ── Map modes ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +46,10 @@ const TRANSLATIONS = {
     locClustered: 'Clustered', locClusteredDesc: 'Hierarchical region clusters',
     regionFiltering: 'Region Filtering',
     regionFilteringDesc: 'Show region selector panel',
+    ethopaiLayers: 'EthopAI Layers',
+    ethopaiLayersDesc: 'Show precomputed restoration layers',
+    rawLayers: 'Raw Layers',
+    rawLayersDesc: 'Show raw layer selector panel',
     clusterColoring: 'Cluster Colouring',
     clusterUniform: 'Uniform',     clusterUniformDesc: 'All clusters one colour',
     clusterAverage: 'Average',     clusterAverageDesc: 'Colour reflects mean score',
@@ -63,6 +71,10 @@ const TRANSLATIONS = {
     locClustered: 'Agrupado', locClusteredDesc: 'Grupos jerárquicos por región',
     regionFiltering: 'Filtro de Región',
     regionFilteringDesc: 'Mostrar panel de selección de regiones',
+    ethopaiLayers: 'Capas EthopAI',
+    ethopaiLayersDesc: 'Mostrar capas de restauración precalculadas',
+    rawLayers: 'Capas sin procesar',
+    rawLayersDesc: 'Mostrar panel de selección de capas',
     clusterColoring: 'Color de Grupos',
     clusterUniform: 'Uniforme',    clusterUniformDesc: 'Todos los grupos en un color',
     clusterAverage: 'Promedio',    clusterAverageDesc: 'Color según puntuación media',
@@ -84,6 +96,10 @@ const TRANSLATIONS = {
     locClustered: 'Gruppiert', locClusteredDesc: 'Hierarchische Gebietsgruppen',
     regionFiltering: 'Gebietsfilter',
     regionFilteringDesc: 'Gebietsauswahl anzeigen',
+    ethopaiLayers: 'EthopAI-Ebenen',
+    ethopaiLayersDesc: 'Vorausberechnete Wiederherstellungsebenen anzeigen',
+    rawLayers: 'Rohdatenebenen',
+    rawLayersDesc: 'Auswahl für Rohdatenebenen anzeigen',
     clusterColoring: 'Gruppenfarbe',
     clusterUniform: 'Einheitlich', clusterUniformDesc: 'Alle Gruppen eine Farbe',
     clusterAverage: 'Durchschnitt', clusterAverageDesc: 'Farbe nach Durchschnittswert',
@@ -105,6 +121,10 @@ const TRANSLATIONS = {
     locClustered: 'ቡድን',     locClusteredDesc: 'ተዋረዳዊ ክልላዊ ቡድኖች',
     regionFiltering: 'ክልል ማጣሪያ',
     regionFilteringDesc: 'የክልል ምርጫ ፓኔል አሳይ',
+    ethopaiLayers: 'EthopAI ንብርብሮች',
+    ethopaiLayersDesc: 'ቀድሞ የተሰሉ የመልሶ ማቋቋም ንብርብሮችን አሳይ',
+    rawLayers: 'ጥሬ ንብርብሮች',
+    rawLayersDesc: 'የጥሬ ንብርብር ምርጫ ፓኔል አሳይ',
     clusterColoring: 'የቡድን ቀለም',
     clusterUniform: 'አንድ ቀለም',    clusterUniformDesc: 'ሁሉም ቡድን አንድ ቀለም',
     clusterAverage: 'አማካይ',        clusterAverageDesc: 'አማካይ ክብደት ቀለም',
@@ -146,7 +166,6 @@ const TILE_LAYERS: Record<MapMode, { url: string; attribution: string }> = {
 // ── Geo helpers ───────────────────────────────────────────────────────────────
 
 const ETHIOPIA_CENTER: [number, number] = [9.145, 40.4897];
-const ETHIOPIA_BOUNDS: [[number, number], [number, number]] = [[2.8, 32.7], [15.3, 48.4]];
 const WORLD_RING = [[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]];
 
 function extractExteriorRings(geojson: any) {
@@ -244,9 +263,20 @@ const SECTION_HEADER: React.CSSProperties = {
 interface EthiopiaMapProps {
   priorityZones?: PriorityZones;
   projects?: Project[];
+  apiBaseUrl?: string;
+  rawLayers?: RawLayerConfig[];
+  rawLayerData?: Record<string, any>;
+  visibleRawLayerIds?: string[];
 }
 
-export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProps) {
+export default function EthiopiaMap({
+  priorityZones,
+  projects,
+  apiBaseUrl,
+  rawLayers = RAW_LAYERS,
+  rawLayerData,
+  visibleRawLayerIds = [],
+}: EthiopiaMapProps) {
   const [boundary, setBoundary] = useState<any>(null);
   const [adminBoundary, setAdminBoundary] = useState<any>(null);
   const [mode, setMode] = useState<MapMode>('standard');
@@ -255,6 +285,12 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
   const [locationMode, setLocationMode] = useState<LocationMode>('clustered');
   const [clusterColorMode, setClusterColorMode] = useState<ClusterColorMode>('average');
   const [regionFilterEnabled, setRegionFilterEnabled] = useState(true);
+  const [ethopaiLayersEnabled, setEthopaiLayersEnabled] = useState(true);
+  const [selectedEthopaiLayerId, setSelectedEthopaiLayerId] = useState(DEFAULT_ETHOPAI_LAYER_ID);
+  const [loadedEthopaiLayerData, setLoadedEthopaiLayerData] = useState<Record<string, any>>({});
+  const [rawLayerSelectorEnabled, setRawLayerSelectorEnabled] = useState(false);
+  const [selectedRawLayerIds, setSelectedRawLayerIds] = useState<string[]>(visibleRawLayerIds);
+  const [loadedRawLayerData, setLoadedRawLayerData] = useState<Record<string, any>>(rawLayerData ?? {});
   const [language, setLanguage] = useState<Language>('en');
   const [showSettings, setShowSettings] = useState(false);
 
@@ -271,7 +307,7 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
   // Load admin regions eagerly — needed for region selector and clustering
   useEffect(() => {
     if (adminBoundary) return;
-    fetch('/data/ethiopia-admin.geojson')
+    fetch('/api/layers/admin_boundaries')
       .then((r) => r.json())
       .then((data) => {
         setAdminBoundary(data);
@@ -281,6 +317,70 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
       })
       .catch((e) => console.error('Failed to load admin boundary:', e));
   }, [adminBoundary]);
+
+  useEffect(() => {
+    setSelectedRawLayerIds(visibleRawLayerIds);
+  }, [visibleRawLayerIds]);
+
+  useEffect(() => {
+    if (!rawLayerData) return;
+    setLoadedRawLayerData((current) => ({ ...current, ...rawLayerData }));
+  }, [rawLayerData]);
+
+  const selectedEthopaiLayer = useMemo(
+    () => ETHOPAI_LAYERS.find((layer) => layer.id === selectedEthopaiLayerId) ?? ETHOPAI_LAYERS[0],
+    [selectedEthopaiLayerId],
+  );
+
+  useEffect(() => {
+    if (!ethopaiLayersEnabled || !selectedEthopaiLayer || loadedEthopaiLayerData[selectedEthopaiLayer.id]) return;
+
+    let active = true;
+
+    fetch(`/api/layers/${selectedEthopaiLayer.id}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        setLoadedEthopaiLayerData((current) => ({ ...current, [selectedEthopaiLayer.id]: data }));
+      })
+      .catch((e) => console.error(`Failed to load EthopAI layer ${selectedEthopaiLayer.id}:`, e));
+
+    return () => {
+      active = false;
+    };
+  }, [ethopaiLayersEnabled, loadedEthopaiLayerData, selectedEthopaiLayer]);
+
+  useEffect(() => {
+    const vectorLayerIds = rawLayers
+      .filter((layer) => layer.kind !== 'raster' && selectedRawLayerIds.includes(layer.id) && !loadedRawLayerData[layer.id])
+      .map((layer) => layer.id);
+
+    if (vectorLayerIds.length === 0) return;
+
+    let active = true;
+
+    Promise.all(
+      vectorLayerIds.map(async (layerId) => {
+        try {
+          const response = await fetch(`/api/layers/${layerId}`);
+          if (!response.ok) return null;
+          return [layerId, await response.json()] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (!active) return;
+      setLoadedRawLayerData((current) => ({
+        ...current,
+        ...Object.fromEntries(entries.filter(Boolean) as Array<readonly [string, any]>),
+      }));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [loadedRawLayerData, rawLayers, selectedRawLayerIds]);
 
   const outsideMask = useMemo(
     () => (boundary ? createOutsideMask(boundary) : null),
@@ -293,9 +393,13 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
   );
 
   const allSelected = regionNames.length > 0 && regionNames.every((n) => selectedRegions.has(n));
+  const allRawLayersSelected = rawLayers.length > 0 && rawLayers.every((layer) => selectedRawLayerIds.includes(layer.id));
 
   // Region panel visible when the setting is on and regions are loaded
   const showRegionPanel = regionFilterEnabled && regionNames.length > 0;
+  const showEthopaiLayerPanel = ethopaiLayersEnabled && ETHOPAI_LAYERS.length > 0;
+  const showRawLayerPanel = rawLayerSelectorEnabled && rawLayers.length > 0;
+  const rawPanelLeft = 16 + (showRegionPanel ? 194 : 0) + (showEthopaiLayerPanel ? 254 : 0);
 
   // Filter cluster nodes whose region is deselected (when panel is active)
   const filteredClusterNodes = useMemo(() => {
@@ -318,6 +422,18 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
 
   function toggleAll() {
     setSelectedRegions(allSelected ? new Set() : new Set(regionNames));
+  }
+
+  function toggleRawLayer(layerId: string) {
+    setSelectedRawLayerIds((current) =>
+      current.includes(layerId)
+        ? current.filter((id) => id !== layerId)
+        : [...current, layerId],
+    );
+  }
+
+  function toggleAllRawLayers() {
+    setSelectedRawLayerIds(allRawLayersSelected ? [] : rawLayers.map((layer) => layer.id));
   }
 
   const tile = TILE_LAYERS[mode];
@@ -462,6 +578,34 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
 
           <div style={{ height: 1, background: '#f3f4f6', margin: '12px 0' }} />
 
+          {/* EthopAI layers */}
+          <div style={SECTION_HEADER}>{t('ethopaiLayers')}</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={ethopaiLayersEnabled}
+              onChange={(e) => setEthopaiLayersEnabled(e.target.checked)}
+              style={{ accentColor: '#16a34a', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: '#374151' }}>{t('ethopaiLayersDesc')}</span>
+          </label>
+
+          <div style={{ height: 1, background: '#f3f4f6', margin: '12px 0' }} />
+
+          {/* Raw layer selection */}
+          <div style={SECTION_HEADER}>{t('rawLayers')}</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={rawLayerSelectorEnabled}
+              onChange={(e) => setRawLayerSelectorEnabled(e.target.checked)}
+              style={{ accentColor: '#16a34a', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: '#374151' }}>{t('rawLayersDesc')}</span>
+          </label>
+
+          <div style={{ height: 1, background: '#f3f4f6', margin: '12px 0' }} />
+
           {/* Language */}
           <div style={SECTION_HEADER}>{t('language')}</div>
           {LANGUAGES.map((lang) => (
@@ -511,13 +655,77 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
         </div>
       )}
 
+      {/* ── EthopAI layer selector — visible when enabled in settings ─────── */}
+      {showEthopaiLayerPanel && (
+        <div style={{
+          position: 'absolute', top: 16, left: showRegionPanel ? 210 : 16, zIndex: 1000,
+          background: 'white', borderRadius: 10, padding: '10px 12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+          maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', width: 238,
+        }}>
+          <div style={{ fontFamily: 'system-ui,sans-serif', fontWeight: 600, fontSize: 13, color: '#111827', marginBottom: 8 }}>
+            {t('ethopaiLayers')}
+          </div>
+          {ETHOPAI_LAYERS.map((layer) => (
+            <label key={layer.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '5px 0', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: 12, color: '#374151', userSelect: 'none' }}>
+              <input
+                type="radio"
+                name="ethopaiLayer"
+                value={layer.id}
+                checked={selectedEthopaiLayerId === layer.id}
+                onChange={() => setSelectedEthopaiLayerId(layer.id)}
+                style={{ accentColor: '#16a34a', cursor: 'pointer', marginTop: 1, flexShrink: 0 }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', color: '#111827', fontWeight: 600, lineHeight: 1.25 }}>{layer.name}</span>
+                <span style={{ display: 'block', color: '#9ca3af', fontSize: 11, lineHeight: 1.25, marginTop: 2 }}>{layer.subtitle}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* ── Raw layer selector — hidden until enabled in settings ─────────── */}
+      {showRawLayerPanel && (
+        <div style={{
+          position: 'absolute', top: 16, left: rawPanelLeft, zIndex: 1000,
+          background: 'white', borderRadius: 10, padding: '10px 12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+          maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', width: 230,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontFamily: 'system-ui,sans-serif', fontWeight: 600, fontSize: 13, color: '#111827' }}>
+              {t('rawLayers')}
+            </span>
+            <button
+              onClick={toggleAllRawLayers}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: '#16a34a', fontFamily: 'system-ui,sans-serif', padding: '2px 4px' }}
+            >
+              {allRawLayersSelected ? t('deselectAll') : t('selectAll')}
+            </button>
+          </div>
+          {rawLayers.map((layer) => (
+            <label key={layer.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '5px 0', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: 12, color: '#374151', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={selectedRawLayerIds.includes(layer.id)}
+                onChange={() => toggleRawLayer(layer.id)}
+                style={{ accentColor: '#16a34a', cursor: 'pointer', marginTop: 1, flexShrink: 0 }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', color: '#111827', fontWeight: 600, lineHeight: 1.25 }}>{layer.name}</span>
+                <span style={{ display: 'block', color: '#9ca3af', fontSize: 11, lineHeight: 1.25, marginTop: 2 }}>{layer.subtitle}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
       <MapContainer
         center={ETHIOPIA_CENTER}
         zoom={6}
-        minZoom={6}
+        minZoom={2}
         maxZoom={18}
-        maxBounds={ETHIOPIA_BOUNDS}
-        maxBoundsViscosity={1.0}
         scrollWheelZoom={true}
         className="ethiopia-map"
       >
@@ -547,12 +755,26 @@ export default function EthiopiaMap({ priorityZones, projects }: EthiopiaMapProp
           })
         }
 
-        {/* Outside-Ethiopia dark mask */}
+        {/* Outside-Ethiopia context mask keeps Ethiopia visually highlighted. */}
         {outsideMask && (
           <GeoJSON
             data={outsideMask as any}
             interactive={false}
             style={{ color: '#111827', weight: 0, fillColor: '#111827', fillOpacity: 0.65, fillRule: 'evenodd' }}
+          />
+        )}
+
+        <RawLayerRenderer
+          layers={rawLayers}
+          apiBaseUrl={apiBaseUrl}
+          visibleLayerIds={selectedRawLayerIds}
+          vectorData={loadedRawLayerData}
+        />
+
+        {ethopaiLayersEnabled && selectedEthopaiLayer && (
+          <EthopaiLayerRenderer
+            layer={selectedEthopaiLayer}
+            data={loadedEthopaiLayerData[selectedEthopaiLayer.id]}
           />
         )}
 
