@@ -1,0 +1,24 @@
+{
+  "name": "@ethopai/map-service",
+  "version": "0.1.0",
+  "description": "Interactive map module serving Ethiopia with priority overlay layers and ecological project markers",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4",
+    "react-leaflet": "4.2.1"
+  },
+  "devDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "vite": "5.4.6",
+    "@vitejs/plugin-react": "4.3.4"
+  }
+}

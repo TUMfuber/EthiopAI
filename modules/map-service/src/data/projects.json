@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "name": "Bale Mountains Reforestation",
+    "lat": 6.95,
+    "lng": 39.85,
+    "type": "Reforestation",
+    "description": "Large-scale native tree planting restoring 5,000 hectares of Afromontane forest.",
+    "organization": "Ethiopian Biodiversity Institute",
+    "status": "Active"
+  },
+  {
+    "id": 2,
+    "name": "Lake Tana Wetland Conservation",
+    "lat": 11.6,
+    "lng": 37.35,
+    "type": "Wetland Conservation",
+    "description": "Protecting critical wetland ecosystems supporting endemic fish species and migratory birds.",
+    "organization": "Amhara Conservation Authority",
+    "status": "Active"
+  },
+  {
+    "id": 3,
+    "name": "Simien Carbon Sequestration",
+    "lat": 13.25,
+    "lng": 38.4,
+    "type": "Carbon Storage",
+    "description": "Monitoring and expanding carbon sink capacity in the Simien Mountains National Park.",
+    "organization": "Green Ethiopia Foundation",
+    "status": "Planning"
+  }
+]
