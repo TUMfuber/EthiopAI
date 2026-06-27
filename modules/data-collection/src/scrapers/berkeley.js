@@ -35,24 +35,49 @@ export async function fetchBerkeleyProjects() {
   )`);
 
   const stmt = db.prepare(`INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  // Log first row keys to debug column names
+  if (rows.length > 0) {
+    const keys = Object.keys(rows[0]);
+    const countryCol = keys.find((k) => k.toLowerCase().includes("country"));
+    const typeCol = keys.find((k) => k.toLowerCase().includes("scope") || k.toLowerCase().includes("type"));
+    console.log(`  Berkeley DB: Country column = "${countryCol}", Type column = "${typeCol}"`);
+  }
   for (const r of rows) {
+    // Find the right column regardless of exact name
+    const country = Object.entries(r).find(([k]) => k.toLowerCase().includes("country"))?.[1] || "";
+    const scopeType = Object.entries(r).find(([k]) => k.toLowerCase().includes("scope") || (k.toLowerCase().includes("type") && !k.toLowerCase().includes("project type from")))?.[1] || "";
+    const projectName = Object.entries(r).find(([k]) => k.toLowerCase().includes("project name"))?.[1] || "";
+    const registry = Object.entries(r).find(([k]) => k.toLowerCase().includes("registry") && !k.toLowerCase().includes("from"))?.[1] || "";
+    const status = Object.entries(r).find(([k]) => k.toLowerCase().includes("voluntary status") || k.toLowerCase() === "status")?.[1] || "";
+    const methodology = Object.entries(r).find(([k]) => k.toLowerCase().includes("methodology") || k.toLowerCase().includes("protocol"))?.[1] || "";
+    const region = Object.entries(r).find(([k]) => k.toLowerCase() === "region")?.[1] || "";
+    const location = Object.entries(r).find(([k]) => k.toLowerCase().includes("project site"))?.[1] || "";
+    const developer = Object.entries(r).find(([k]) => k.toLowerCase().includes("developer"))?.[1] || "";
+    const creditsIssued = Object.entries(r).find(([k]) => k.toLowerCase().includes("credits") && k.toLowerCase().includes("issued"))?.[1] || 0;
+    const creditsRetired = Object.entries(r).find(([k]) => k.toLowerCase().includes("credits") && k.toLowerCase().includes("retired"))?.[1] || 0;
+    const creditsRemaining = Object.entries(r).find(([k]) => k.toLowerCase().includes("remaining"))?.[1] || 0;
+    const annualReductions = Object.entries(r).find(([k]) => k.toLowerCase().includes("estimated annual"))?.[1] || 0;
+    const projectUrl = Object.entries(r).find(([k]) => k.toLowerCase().includes("website"))?.[1] || "";
+    const description = Object.entries(r).find(([k]) => k.toLowerCase().includes("description"))?.[1] || "";
+    const projectId = Object.entries(r).find(([k]) => k.toLowerCase().includes("project id"))?.[1] || "";
+
     stmt.run([
-      r["Project ID"] || "",
-      r["Project Name"] || "",
-      r["Voluntary Registry"] || "",
-      r["Voluntary Status"] || "",
-      r["Scope Type"] || "",
-      r["Methodology / Protocol"] || "",
-      r["Region"] || "",
-      r["Country"] || "",
-      r["Project Site Location"] || "",
-      r["Project Developer"] || "",
-      parseFloat(r["Total Credits \nIssued"] || r["Total Credits Issued"] || 0) || 0,
-      parseFloat(r["Total Credits \nRetired"] || r["Total Credits Retired"] || 0) || 0,
-      parseFloat(r["Total Credits Remaining"] || 0) || 0,
-      parseFloat(r["Estimated Annual Emission Reductions"] || 0) || 0,
-      r["Project Website"] || "",
-      r["Project Description"] || "",
+      String(projectId),
+      String(projectName),
+      String(registry),
+      String(status),
+      String(scopeType),
+      String(methodology),
+      String(region),
+      String(country),
+      String(location),
+      String(developer),
+      parseFloat(creditsIssued) || 0,
+      parseFloat(creditsRetired) || 0,
+      parseFloat(creditsRemaining) || 0,
+      parseFloat(annualReductions) || 0,
+      String(projectUrl),
+      String(description),
     ]);
   }
   stmt.free();
