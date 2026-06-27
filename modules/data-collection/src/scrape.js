@@ -3,31 +3,34 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { fetchVerraProjects } from "./scrapers/verra.js";
 import { fetchGoldStandardProjects } from "./scrapers/goldstandard.js";
+import { fetchACRProjects } from "./scrapers/acr.js";
+import { fetchPlanVivoProjects } from "./scrapers/planvivo.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = join(__dirname, "..", "output");
 
+async function scrape(name, fn) {
+  try {
+    const results = await fn();
+    console.log(`✓ ${name}: ${results.length} projects`);
+    return results;
+  } catch (e) {
+    console.error(`✗ ${name} failed: ${e.message}`);
+    return [];
+  }
+}
+
 async function main() {
   console.log("Scraping Ethiopian carbon credit projects...\n");
 
-  let verra = [];
-  let gs = [];
+  const results = await Promise.all([
+    scrape("Verra VCS", fetchVerraProjects),
+    scrape("Gold Standard", fetchGoldStandardProjects),
+    scrape("ACR", fetchACRProjects),
+    scrape("Plan Vivo", fetchPlanVivoProjects),
+  ]);
 
-  try {
-    verra = await fetchVerraProjects();
-    console.log(`✓ Verra: ${verra.length} projects`);
-  } catch (e) {
-    console.error(`✗ Verra failed: ${e.message}`);
-  }
-
-  try {
-    gs = await fetchGoldStandardProjects();
-    console.log(`✓ Gold Standard: ${gs.length} projects`);
-  } catch (e) {
-    console.error(`✗ Gold Standard failed: ${e.message}`);
-  }
-
-  const all = [...verra, ...gs];
+  const all = results.flat();
   if (all.length === 0) {
     console.error("\nNo projects found. Check network/API access.");
     process.exit(1);
@@ -35,7 +38,7 @@ async function main() {
 
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(join(OUTPUT_DIR, "raw-projects.json"), JSON.stringify(all, null, 2));
-  console.log(`\nSaved ${all.length} projects to output/raw-projects.json`);
+  console.log(`\nTotal: ${all.length} projects saved to output/raw-projects.json`);
 }
 
 main().catch(console.error);
