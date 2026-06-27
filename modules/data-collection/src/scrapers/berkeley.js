@@ -1,21 +1,11 @@
 import XLSX from "xlsx";
+import Database from "better-sqlite3";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DB_PATH = join(__dirname, "..", "output", "berkeley.db");
 const BERKELEY_URL = "https://gspp.berkeley.edu/assets/uploads/page/Voluntary-Registry-Offsets-Database--v2026-04.xlsx";
-
-const TYPES_WE_WANT = [
-  "afforestation",
-  "reforestation",
-  "jurisdictional redd",
-  "redd+",
-  "redd",
-  "sustainable agriculture",
-  "wetland restoration",
-];
-
-function matchesType(projectType) {
-  const lower = (projectType || "").toLowerCase();
-  return TYPES_WE_WANT.some((t) => lower.includes(t));
-}
 
 export async function fetchBerkeleyProjects() {
   console.log("  Berkeley DB: downloading Excel...");
@@ -25,52 +15,100 @@ export async function fetchBerkeleyProjects() {
   const buffer = await res.arrayBuffer();
   const workbook = XLSX.read(Buffer.from(buffer), { type: "buffer" });
 
-  // Use the "Projects" tab
+  // Find Projects tab
   const sheetName = workbook.SheetNames.find((s) => s.toLowerCase().includes("project")) || workbook.SheetNames[1];
-  if (!sheetName) throw new Error("Could not find Projects tab");
-
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet);
-  console.log(`  Berkeley DB: ${rows.length} total rows in "${sheetName}" tab`);
+  console.log(`  Berkeley DB: ${rows.length} rows loaded from "${sheetName}"`);
 
-  // Filter: Ethiopia + matching project types
-  const filtered = rows.filter((r) => {
-    const country = Object.values(r).join(" ").toLowerCase();
-    if (!country.includes("ethiopia")) return false;
-    const type = (r["Project Type"] || r["Type"] || r["Scope"] || r["Category"] || "").toString();
-    return matchesType(type);
+  // Load into SQLite
+  const db = new Database(DB_PATH);
+  db.pragma("journal_mode = WAL");
+
+  db.exec(`DROP TABLE IF EXISTS projects`);
+  db.exec(`CREATE TABLE projects (
+    project_id TEXT,
+    project_name TEXT,
+    registry TEXT,
+    status TEXT,
+    scope_type TEXT,
+    methodology TEXT,
+    region TEXT,
+    country TEXT,
+    project_site_location TEXT,
+    project_developer TEXT,
+    total_credits_issued REAL,
+    total_credits_retired REAL,
+    total_credits_remaining REAL,
+    estimated_annual_reductions REAL,
+    project_url TEXT,
+    project_description TEXT
+  )`);
+
+  const insert = db.prepare(`INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const tx = db.transaction((rows) => {
+    for (const r of rows) {
+      insert.run(
+        r["Project ID"] || "",
+        r["Project Name"] || "",
+        r["Voluntary Registry"] || "",
+        r["Voluntary Status"] || "",
+        r["Scope Type"] || "",
+        r["Methodology / Protocol"] || "",
+        r["Region"] || "",
+        r["Country"] || "",
+        r["Project Site Location"] || "",
+        r["Project Developer"] || "",
+        parseFloat(r["Total Credits \nIssued"] || r["Total Credits Issued"] || 0) || 0,
+        parseFloat(r["Total Credits \nRetired"] || r["Total Credits Retired"] || 0) || 0,
+        parseFloat(r["Total Credits Remaining"] || 0) || 0,
+        parseFloat(r["Estimated Annual Emission Reductions"] || 0) || 0,
+        r["Project Website"] || "",
+        r["Project Description"] || ""
+      );
+    }
   });
+  tx(rows);
+  console.log(`  Berkeley DB: loaded into SQLite`);
 
-  console.log(`  Berkeley DB: ${filtered.length} Ethiopia projects matching our types`);
+  // Query Ethiopia + our target types
+  const results = db.prepare(`
+    SELECT * FROM projects
+    WHERE country LIKE '%Ethiopia%'
+    AND (
+      scope_type LIKE '%Afforestation%'
+      OR scope_type LIKE '%Reforestation%'
+      OR scope_type LIKE '%REDD%'
+      OR scope_type LIKE '%Jurisdictional%'
+      OR scope_type LIKE '%Sustainable Agriculture%'
+      OR scope_type LIKE '%Wetland%'
+    )
+  `).all();
 
-  return filtered.map((r, i) => {
-    const name = r["Project Name"] || r["project_name"] || r["Project"] || r["Name"] || "";
-    const registry = r["Registry"] || r["registry"] || "";
-    const type = r["Project Type"] || r["Type"] || r["Scope"] || "";
-    const credits = r["Total Credits Issued"] || r["Credits Issued"] || r["Offsets Issued"] || 0;
-    const status = r["Status"] || r["Project Status"] || "";
-    const developer = r["Project Developer"] || r["Developer"] || r["Proponent"] || "";
-    const methodology = r["Methodology"] || r["Protocol"] || "";
-    const id = r["Project ID"] || r["ID"] || r["Registry Project ID"] || `berkeley-${i}`;
+  db.close();
+  console.log(`  Berkeley DB: ${results.length} Ethiopia projects matching target types`);
 
-    return {
-      id: `berkeley-${id}`,
-      name,
-      lat: null,
-      lng: null,
-      type,
-      description: "",
-      organization: developer,
-      status,
-      registry: registry || "Berkeley_DB",
-      registryId: String(id),
-      methodology,
-      creditsIssued: typeof credits === "number" ? credits : parseInt(credits) || 0,
-      creditingPeriodStart: r["Crediting Period Start"] || r["Start Date"] || "",
-      creditingPeriodEnd: r["Crediting Period End"] || r["End Date"] || "",
-      sdgContributions: [],
-      projectUrl: r["Project URL"] || r["URL"] || "",
-      source: "berkeley-db",
-    };
-  });
+  return results.map((r) => ({
+    id: `berkeley-${r.project_id}`,
+    name: r.project_name,
+    lat: null,
+    lng: null,
+    type: r.scope_type,
+    description: r.project_description,
+    organization: r.project_developer,
+    status: r.status,
+    registry: r.registry || "Berkeley_DB",
+    registryId: r.project_id,
+    methodology: r.methodology,
+    creditsIssued: r.total_credits_issued,
+    creditsRetired: r.total_credits_retired,
+    creditsRemaining: r.total_credits_remaining,
+    annualReductions: r.estimated_annual_reductions,
+    creditingPeriodStart: "",
+    creditingPeriodEnd: "",
+    sdgContributions: [],
+    projectUrl: r.project_url,
+    location: r.project_site_location,
+    source: "berkeley-db",
+  }));
 }

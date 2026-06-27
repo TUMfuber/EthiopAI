@@ -10,6 +10,7 @@
     "all": "node src/scrape.js && node src/ai-research.js && node src/enrich.js"
   },
   "dependencies": {
+    "better-sqlite3": "11.7.0",
     "dotenv": "16.4.7",
     "openai": "4.73.0",
     "puppeteer": "23.11.1",
