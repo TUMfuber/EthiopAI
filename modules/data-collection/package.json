@@ -1,0 +1,14 @@
+{
+  "name": "@ethopai/data-collection",
+  "version": "0.1.0",
+  "description": "Scrapes carbon credit registries for Ethiopian NGO/ecological projects",
+  "type": "module",
+  "scripts": {
+    "scrape": "node src/scrape.js",
+    "enrich": "node src/enrich.js",
+    "all": "node src/scrape.js && node src/enrich.js"
+  },
+  "dependencies": {
+    "openai": "4.73.0"
+  }
+}
