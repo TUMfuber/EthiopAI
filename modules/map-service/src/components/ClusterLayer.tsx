@@ -12,6 +12,7 @@ export type LeafNode = {
   lat: number;
   lng: number;
   label?: string;
+  weight?: number;
 };
 
 export type ClusterNode = {
@@ -20,40 +21,69 @@ export type ClusterNode = {
   lat: number;
   lng: number;
   count: number;
+  depth: number;
   label?: string;
+  weight?: number;    // mean weight of leaf descendants
+  maxWeight?: number; // highest weight among leaf descendants
+  bounds?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
   children: Array<ClusterNode | LeafNode>;
 };
 
+export type ClusterColorMode = 'uniform' | 'average' | 'peak';
+
 export interface ClusterLayerConfig {
-  /** Fill colour for cluster bubbles */
   clusterColor?: string;
-  /** Fill colour for individual leaf points */
   leafColor?: string;
-  /** Radius in px of leaf CircleMarkers */
   leafRadius?: number;
-  /** Fly-to animation duration in seconds */
   flyDuration?: number;
-  /** Padding around cluster bounds when flying in, [y, x] pixels */
   flyPadding?: [number, number];
+  /** How cluster bubble colour is derived from point weights. */
+  clusterColorMode?: ClusterColorMode;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Level configuration ───────────────────────────────────────────────────────
+// One entry per cluster depth. The last entry is the "points" level (leaves).
+// Clicking a cluster at depth N flies into it and shows depth N+1.
+// Tree maxDepth in buildClusterTree must equal LEVELS.length - 1.
+export const LEVELS: { minZoom: number; maxZoom: number }[] = [
+  { minZoom: 6,  maxZoom: 7  }, // depth 0 — regional clusters
+  { minZoom: 8,  maxZoom: 9  }, // depth 1 — grid sub-clusters
+  { minZoom: 10, maxZoom: 18 }, // leaves — individual points
+];
 
-function getAllLeaves(node: ClusterNode | LeafNode): LeafNode[] {
-  if (node.type === 'leaf') return [node];
-  return node.children.flatMap(getAllLeaves);
+// ── Color scale ───────────────────────────────────────────────────────────────
+
+export function weightToColor(weight: number): string {
+  const w = Math.max(0, Math.min(1, weight));
+  return `hsl(${Math.round(w * 120)}, 75%, 42%)`;
 }
 
+// ── Visibility ────────────────────────────────────────────────────────────────
+
+/**
+ * Return the nodes that should be rendered at `targetDepth`.
+ * Clusters shallower than targetDepth are transparently expanded;
+ * clusters at or deeper than targetDepth are returned as-is (shown as bubbles).
+ */
 function getVisible(
   nodes: Array<ClusterNode | LeafNode>,
-  expanded: Set<string>,
+  targetDepth: number,
 ): Array<ClusterNode | LeafNode> {
   return nodes.flatMap((node) => {
     if (node.type === 'leaf') return [node];
-    if (!expanded.has(node.id)) return [node];
-    return getVisible(node.children, expanded);
+    if (node.depth >= targetDepth) return [node];
+    return getVisible(node.children, targetDepth);
   });
 }
+
+/** Map the current zoom to an index into LEVELS. */
+function zoomToLevelIdx(zoom: number): number {
+  if (zoom < LEVELS[0].minZoom) return 0;
+  const idx = LEVELS.findIndex((l) => zoom >= l.minZoom && zoom <= l.maxZoom);
+  return idx === -1 ? LEVELS.length - 1 : idx;
+}
+
+// ── Cluster icon ──────────────────────────────────────────────────────────────
 
 function makeClusterIcon(count: number, color: string): L.DivIcon {
   const size = count > 150 ? 50 : count > 30 ? 38 : 28;
@@ -79,7 +109,6 @@ function makeClusterIcon(count: number, color: string): L.DivIcon {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface ClusterLayerProps extends ClusterLayerConfig {
-  /** Top-level nodes — clusters or leaves */
   nodes: Array<ClusterNode | LeafNode>;
 }
 
@@ -88,50 +117,51 @@ export default function ClusterLayer({
   clusterColor = '#2563eb',
   leafColor = '#1d4ed8',
   leafRadius = 5,
-  flyDuration = 0.7,
-  flyPadding = [40, 40],
+  flyDuration = 0.8,
+  flyPadding = [60, 60],
+  clusterColorMode = 'average',
 }: ClusterLayerProps) {
   const map = useMap();
-  // Map from cluster id → zoom level at which it was expanded
-  const [expandedAtZoom, setExpandedAtZoom] = useState<Map<string, number>>(new Map());
-  const expanded = useMemo(() => new Set(expandedAtZoom.keys()), [expandedAtZoom]);
+  const [zoom, setZoom] = useState(map.getZoom());
 
-  // Collapse any cluster whose expand-zoom is higher than the current zoom
-  useMapEvent('zoomend', () => {
-    const z = map.getZoom();
-    setExpandedAtZoom((prev) => {
-      const next = new Map([...prev].filter(([, expandZoom]) => z >= expandZoom));
-      return next.size === prev.size ? prev : next;
-    });
-  });
+  function resolveClusterColor(node: ClusterNode): string {
+    if (clusterColorMode === 'uniform') return clusterColor;
+    if (clusterColorMode === 'peak')
+      return node.maxWeight != null ? weightToColor(node.maxWeight) : clusterColor;
+    // 'average'
+    return node.weight != null ? weightToColor(node.weight) : clusterColor;
+  }
 
-  const visible = getVisible(nodes, expanded);
+  useMapEvent('zoomend', () => setZoom(map.getZoom()));
+
+  const levelIdx = useMemo(() => zoomToLevelIdx(zoom), [zoom]);
+  const visible  = useMemo(() => getVisible(nodes, levelIdx), [nodes, levelIdx]);
 
   function handleClusterClick(cluster: ClusterNode) {
-    const leaves = getAllLeaves(cluster);
-    if (leaves.length === 0) return;
-    const lats = leaves.map((l) => l.lat);
-    const lngs = leaves.map((l) => l.lng);
-    const bounds = L.latLngBounds(
-      [Math.min(...lats), Math.min(...lngs)],
-      [Math.max(...lats), Math.max(...lngs)],
-    );
-    // Record the zoom Leaflet will land on (not current zoom) so the zoomend
-    // fired by the fly animation itself doesn't immediately re-collapse this cluster.
-    const destZoom = Math.floor(map.getBoundsZoom(bounds));
-    setExpandedAtZoom((prev) => new Map([...prev, [cluster.id, destZoom]]));
-    map.flyToBounds(bounds, { padding: flyPadding, duration: flyDuration });
+    if (!cluster.bounds) return;
+    const nextIdx = cluster.depth + 1;
+    if (nextIdx >= LEVELS.length) return;
+
+    const { minLat, minLng, maxLat, maxLng } = cluster.bounds;
+    const bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+    const { minZoom, maxZoom } = LEVELS[nextIdx];
+
+    // Zoom to fit the cluster's area, clamped to the next level's zoom range
+    const fitZoom   = Math.floor(map.getBoundsZoom(bounds));
+    const targetZoom = Math.min(Math.max(fitZoom, minZoom), maxZoom);
+    map.flyTo(bounds.getCenter(), targetZoom, { duration: flyDuration });
   }
 
   return (
     <>
       {visible.map((node) => {
         if (node.type === 'cluster') {
+          const color = resolveClusterColor(node);
           return (
             <Marker
               key={node.id}
               position={[node.lat, node.lng]}
-              icon={makeClusterIcon(node.count, clusterColor)}
+              icon={makeClusterIcon(node.count, color)}
               eventHandlers={{ click: () => handleClusterClick(node) }}
             >
               {node.label && (
@@ -142,14 +172,30 @@ export default function ClusterLayer({
             </Marker>
           );
         }
+
+        const fillColor = node.weight != null ? weightToColor(node.weight) : leafColor;
         return (
           <CircleMarker
             key={node.id}
             center={[node.lat, node.lng]}
             radius={leafRadius}
-            pathOptions={{ color: 'white', weight: 1, fillColor: leafColor, fillOpacity: 0.9 }}
+            pathOptions={{ color: 'white', weight: 1, fillColor, fillOpacity: 0.9 }}
           >
-            {node.label && <Popup>{node.label}</Popup>}
+            {node.label && (
+              <Popup>
+                <div style={{ fontFamily: 'system-ui,sans-serif', fontSize: 12, minWidth: 110 }}>
+                  <strong>{node.label}</strong>
+                  {node.weight != null && (
+                    <div style={{ marginTop: 4, color: '#374151' }}>
+                      Weight:{' '}
+                      <span style={{ color: weightToColor(node.weight), fontWeight: 700 }}>
+                        {node.weight.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Popup>
+            )}
           </CircleMarker>
         );
       })}

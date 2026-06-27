@@ -7,6 +7,7 @@ export interface InputPoint {
   lat: number;
   lng: number;
   label?: string;
+  weight?: number; // 0–1
 }
 
 export interface PartitionGroup {
@@ -166,13 +167,29 @@ export function buildClusterTree(
 
   return groups.map((g) => {
     const children = buildClusterTree(g.points, strategy, config, g.key, depth + 1);
+    const withWeight = g.points.filter((p) => p.weight != null);
+    const avgWeight = withWeight.length > 0
+      ? withWeight.reduce((s, p) => s + p.weight!, 0) / withWeight.length
+      : undefined;
+    const maxWeight = withWeight.length > 0
+      ? Math.max(...withWeight.map((p) => p.weight!))
+      : undefined;
+    const lats = g.points.map((p) => p.lat);
+    const lngs = g.points.map((p) => p.lng);
     return {
       type: 'cluster' as const,
       id: g.key,
       lat: g.lat,
       lng: g.lng,
       count: g.points.length,
+      depth,
       label: g.label,
+      weight: avgWeight,
+      maxWeight,
+      bounds: {
+        minLat: Math.min(...lats), maxLat: Math.max(...lats),
+        minLng: Math.min(...lngs), maxLng: Math.max(...lngs),
+      },
       children,
     } satisfies ClusterNode;
   });

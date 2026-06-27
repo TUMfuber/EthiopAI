@@ -29,6 +29,7 @@ export function generateFlatPoints(seed = 42): InputPoint[] {
     lat: latMin + rand() * (latMax - latMin),
     lng: lngMin + rand() * (lngMax - lngMin),
     label: `Point ${i + 1}`,
+    weight: rand(),
   }));
 }
 
