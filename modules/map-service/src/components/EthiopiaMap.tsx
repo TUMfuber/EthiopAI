@@ -292,7 +292,7 @@ export default function EthiopiaMap({
   const [clusterNodes, setClusterNodes] = useState<Array<ClusterNode | LeafNode>>([]);
   const [locationMode, setLocationMode] = useState<LocationMode>('clustered');
   const [clusterColorMode, setClusterColorMode] = useState<ClusterColorMode>('average');
-  const [regionFilterEnabled, setRegionFilterEnabled] = useState(true);
+  const [regionFilterEnabled, setRegionFilterEnabled] = useState(false);
   const [loadedEthopaiLayerData, setLoadedEthopaiLayerData] = useState<Record<string, any>>({});
   const [rawLayerSelectorEnabled, setRawLayerSelectorEnabled] = useState(false);
   const [selectedRawLayerIds, setSelectedRawLayerIds] = useState<string[]>(visibleRawLayerIds);
