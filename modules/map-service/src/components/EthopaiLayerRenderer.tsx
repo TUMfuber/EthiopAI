@@ -1,58 +1,95 @@
-import { GeoJSON } from 'react-leaflet';
-import type { Feature, FeatureCollection, GeoJsonProperties } from 'geojson';
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { useMap, useMapEvent } from 'react-leaflet';
+import L from 'leaflet';
 import type { EthopaiLayerConfig } from '../layers/ethopaiLayers';
 
-type EthopaiLayerRendererProps = {
+type Props = {
   layer: EthopaiLayerConfig;
-  data?: FeatureCollection;
+  data?: any;
 };
 
-function numericProperty(properties: GeoJsonProperties | null | undefined, key: string) {
-  const value = properties?.[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function scoreColor(score: number | null, maxScore: number) {
-  if (score === null || maxScore <= 0) return '#d1d5db';
-
+function scoreToColor(score: number | null, maxScore: number): string {
+  if (score === null || maxScore <= 0) return '180,180,180';
   const ratio = Math.max(0, Math.min(1, score / maxScore));
-  if (ratio >= 0.8) return '#166534';
-  if (ratio >= 0.6) return '#16a34a';
-  if (ratio >= 0.4) return '#84cc16';
-  if (ratio >= 0.2) return '#facc15';
-  return '#f97316';
+  // Green (high) → Yellow → Orange → Red (low opportunity = grey)
+  // Inverted: high score = green = good
+  if (ratio >= 0.75) return '22,101,52';   // dark green
+  if (ratio >= 0.5) return '22,163,74';    // green
+  if (ratio >= 0.35) return '132,204,22';  // lime
+  if (ratio >= 0.2) return '250,204,21';   // yellow
+  return '249,115,22';                      // orange
 }
 
-function featureScore(feature: Feature, layer: EthopaiLayerConfig) {
-  return numericProperty(feature.properties, layer.scoreProperty) ?? numericProperty(feature.properties, 'score');
+function createGradientLayer(map: L.Map, features: any[], layer: EthopaiLayerConfig, radius: number): L.Layer {
+  const points: { lat: number; lng: number; score: number }[] = [];
+
+  for (const f of features) {
+    const props = f.properties;
+    const score = props?.[layer.scoreProperty] ?? props?.score ?? null;
+    if (score === null) continue;
+    // Get centroid from polygon
+    const coords = f.geometry?.coordinates?.[0];
+    if (!coords) continue;
+    const lngs = coords.map((c: number[]) => c[0]);
+    const lats = coords.map((c: number[]) => c[1]);
+    const lat = lats.reduce((a: number, b: number) => a + b, 0) / lats.length;
+    const lng = lngs.reduce((a: number, b: number) => a + b, 0) / lngs.length;
+    points.push({ lat, lng, score });
+  }
+
+  const CanvasLayer = L.GridLayer.extend({
+    createTile(coords: L.Coords) {
+      const tile = document.createElement('canvas');
+      const size = this.getTileSize();
+      tile.width = size.x;
+      tile.height = size.y;
+      const ctx = tile.getContext('2d')!;
+
+      for (const p of points) {
+        const px = map.project([p.lat, p.lng], coords.z);
+        const x = px.x - coords.x * size.x;
+        const y = px.y - coords.y * size.y;
+        if (x < -radius * 2 || x > size.x + radius * 2 || y < -radius * 2 || y > size.y + radius * 2) continue;
+
+        const color = scoreToColor(p.score, layer.maxScore);
+        const alpha = 0.6;
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        grad.addColorStop(0, `rgba(${color},${alpha})`);
+        grad.addColorStop(0.7, `rgba(${color},${alpha * 0.4})`);
+        grad.addColorStop(1, `rgba(${color},0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return tile;
+    },
+  });
+
+  return new (CanvasLayer as any)({ opacity: 0.85, pane: 'overlayPane' });
 }
 
-export default function EthopaiLayerRenderer({ layer, data }: EthopaiLayerRendererProps) {
-  if (!data) return null;
+export default function EthopaiLayerRenderer({ layer, data }: Props) {
+  const map = useMap();
+  const layerRef = useRef<L.Layer | null>(null);
+  const [zoom, setZoom] = useState(map.getZoom());
 
-  return (
-    <GeoJSON
-      key={layer.id}
-      data={data}
-      style={(feature) => {
-        const score = feature ? featureScore(feature as Feature, layer) : null;
-        const hasScore = score !== null;
-        return {
-          color: hasScore ? '#14532d' : '#9ca3af',
-          weight: hasScore ? 0.8 : 0.4,
-          fillColor: scoreColor(score, layer.maxScore),
-          fillOpacity: hasScore ? 0.42 : 0.1,
-        };
-      }}
-      onEachFeature={(feature, leafletLayer) => {
-        const properties = feature.properties as Record<string, unknown> | undefined;
-        const name = typeof properties?.name === 'string' ? properties.name : layer.name;
-        const region = typeof properties?.admin_region === 'string' ? properties.admin_region : null;
-        const score = featureScore(feature as Feature, layer);
-        const scoreText = score === null ? 'No score' : `Score: ${score}`;
-        const label = [name, region, scoreText].filter(Boolean).join(' | ');
-        leafletLayer.bindTooltip(label, { permanent: false, direction: 'center' });
-      }}
-    />
-  );
+  useMapEvent('zoomend', () => setZoom(map.getZoom()));
+
+  useEffect(() => {
+    if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; }
+    if (!data?.features?.length) return;
+
+    // Radius scales with zoom for consistent visual density
+    const radius = Math.max(15, 35 - (zoom - 6) * 4);
+    const gradLayer = createGradientLayer(map, data.features, layer, radius);
+    gradLayer.addTo(map);
+    layerRef.current = gradLayer;
+
+    return () => { if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; } };
+  }, [data, layer, map, zoom]);
+
+  return null;
 }
