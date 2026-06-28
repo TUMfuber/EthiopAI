@@ -33,8 +33,8 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
   const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.3;
   const padLng = (bounds.getEast() - bounds.getWest()) * 0.3;
 
-  // Spatial binning: bin size = radius so one point per visual blob area
-  const binSize = radius < 15 ? 0 : Math.floor(radius * 0.8);
+  // Spatial binning: bin size = radius so one point per visual blob area, min 20px
+  const binSize = Math.max(20, Math.floor(radius * 0.8));
   const bins = new Map<string, { px: L.Point; value: number }>();
 
   for (const p of points) {
@@ -108,13 +108,12 @@ export default function PriorityHeatmap({ visible }: { visible: boolean }) {
   // Redraw on move/zoom
   const redraw = () => {
     if (!canvasRef.current || !visible || points.length === 0) return;
-    // Radius = fixed geographic distance (0.25° ≈ 25km) converted to pixels
-    // This ensures blobs always overlap by the same geographic amount
-    const degreeSpan = 0.25; // slightly larger than grid spacing to ensure overlap
+    // Radius = fixed geographic distance (0.25°) converted to pixels, capped for performance
+    const degreeSpan = 0.25;
     const center = map.getCenter();
     const p1 = map.latLngToContainerPoint([center.lat, center.lng]);
     const p2 = map.latLngToContainerPoint([center.lat + degreeSpan, center.lng]);
-    const radius = Math.max(8, Math.abs(p1.y - p2.y));
+    const radius = Math.min(80, Math.max(8, Math.abs(p1.y - p2.y)));
     drawHeatmap(canvasRef.current, map, points, radius);
 
     // Position canvas at map origin
