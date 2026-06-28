@@ -213,12 +213,6 @@ function extractLeaves(nodes: Array<ClusterNode | LeafNode>): LeafNode[] {
 
 // ── Raw points layer (Points mode) ────────────────────────────────────────────
 
-function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
-  const map = useMap();
-  useMapEvent('zoomend', () => onZoom(map.getZoom()));
-  return null;
-}
-
 function RawPointsLayer({ leaves, color = '#1d4ed8', radius = 5, minZoom = 9 }: {
   leaves: LeafNode[];
   color?: string;
@@ -352,12 +346,11 @@ export default function EthiopiaMap({
   );
 
   useEffect(() => {
-    if (!activeEthopaiLayer) return;
+    if (!activeEthopaiLayer || loadedEthopaiLayerData[activeEthopaiLayer.id]) return;
 
     let active = true;
-    const zoomLevel = 6; // initial load at overview zoom
 
-    fetch(`/api/layers/${activeEthopaiLayer.id}?zoom=${zoomLevel}`)
+    fetch(`/api/layers/${activeEthopaiLayer.id}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!active || !data) return;
@@ -368,21 +361,7 @@ export default function EthiopiaMap({
     return () => {
       active = false;
     };
-  }, [activeEthopaiLayer]);
-
-  // Zoom-based LOD: reload layer at higher detail when zoomed in
-  const [mapZoom, setMapZoom] = useState(6);
-  const lodBucket = mapZoom >= 8 ? 'high' : mapZoom >= 6 ? 'med' : 'low';
-
-  useEffect(() => {
-    if (!activeEthopaiLayer) return;
-    let active = true;
-    fetch(`/api/layers/${activeEthopaiLayer.id}?zoom=${mapZoom}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (active && data) setLoadedEthopaiLayerData((c) => ({ ...c, [activeEthopaiLayer.id]: data })); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [lodBucket, activeEthopaiLayer]);
+  }, [activeEthopaiLayer, loadedEthopaiLayerData]);
 
   useEffect(() => {
     const vectorLayerIds = rawLayers
@@ -724,7 +703,6 @@ export default function EthiopiaMap({
         className="ethiopia-map"
       >
         <TileLayer key={mode} attribution={tile.attribution} url={tile.url} />
-        <ZoomWatcher onZoom={setMapZoom} />
 
         {/* Region borders — visible in all modes when region filtering is enabled */}
         {regionFilterEnabled && adminBoundary &&

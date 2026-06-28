@@ -589,36 +589,6 @@ def output_score(value: float | None) -> int | None:
     return None if value is None else round(100 * clamp(value))
 
 
-def _fallback_carbon(indicators: dict[str, Any], climate_suitability: float | None, eligibility: float | None) -> int | None:
-    """Carbon proxy: climate suitability × (1 - tree_fraction) × eligibility. Areas with good climate but few trees = reforestation opportunity."""
-    cs = climate_suitability or safe_float(indicators.get("climate_suitability")) or 0
-    tree = safe_float(indicators.get("tree_fraction")) or 0
-    elig = eligibility if eligibility is not None else (safe_float(indicators.get("landcover_eligibility")) or 0)
-    score = cs * (1 - tree) * elig * 100
-    return round(score) if score > 0 else None
-
-
-def _fallback_water(indicators: dict[str, Any], stats: dict[str, tuple[float | None, float | None]]) -> int | None:
-    """Water proxy: rainfall × slope interaction. High rain + steep slope = erosion risk."""
-    rain = safe_float(indicators.get("seasonal_rainfall_mm")) or safe_float(indicators.get("annual_rainfall_mm"))
-    slope = safe_float(indicators.get("slope_p90"))
-    if rain is None or slope is None:
-        return None
-    rain_norm = clamp(rain / 400)  # normalize: 400mm+ is high
-    slope_norm = clamp(slope / 20)  # normalize: 20°+ is steep
-    score = rain_norm * 0.6 + slope_norm * 0.4
-    return round(score * 100) if score > 0 else None
-
-
-def _fallback_degradation(indicators: dict[str, Any]) -> int | None:
-    """Degradation proxy: bare/sparse fraction + low tree cover."""
-    bare = safe_float(indicators.get("bare_sparse_fraction")) or 0
-    tree = safe_float(indicators.get("tree_fraction")) or 0
-    grassland = safe_float(indicators.get("grassland_fraction")) or 0
-    score = bare * 0.5 + (1 - tree) * 0.3 + grassland * 0.2
-    return round(score * 50) if score > 0 else None
-
-
 def compute_scores(
     cell: GridCell,
     indicators: dict[str, Any],
@@ -791,9 +761,9 @@ def compute_scores(
         "missing_indicators": missing,
         "gating_applied": gating_applied,
         "landcover_eligibility": rounded(eligibility),
-        "degraded_restorable_land_score": output_score(degraded_restorable) or _fallback_degradation(indicators),
-        "carbon_recovery_score": output_score(carbon_recovery) or _fallback_carbon(indicators, climate_suitability, eligibility),
-        "water_erosion_score": output_score(water_erosion_benefit) or _fallback_water(indicators, stats),
+        "degraded_restorable_land_score": output_score(degraded_restorable),
+        "carbon_recovery_score": output_score(carbon_recovery),
+        "water_erosion_score": output_score(water_erosion_benefit),
         "biodiversity_livelihood_score": output_score(biodiversity_livelihood),
         "restoration_priority_score": None if priority_score is None else round(priority_score),
         "priority_class": score_class(priority_score),
