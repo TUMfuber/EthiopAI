@@ -1,0 +1,13 @@
+{
+  "name": "satellite-pipeline",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.654.0",
+    "sharp": "0.33.5",
+    "geotiff": "2.1.3"
+  }
+}

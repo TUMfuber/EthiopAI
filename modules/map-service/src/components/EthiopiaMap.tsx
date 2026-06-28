@@ -7,6 +7,9 @@ import EthopaiLayerRenderer from './EthopaiLayerRenderer';
 import { buildEthiopiaExample, loadProjectPoints } from './ethiopiaExample';
 import PriorityOverlays, { type PriorityZones } from './PriorityOverlays';
 import ProjectMarkers, { type Project } from './ProjectMarkers';
+import PriorityHeatmap from './PriorityHeatmap';
+import RecommendationPanel from './RecommendationPanel';
+import PriorityToggle from './PriorityToggle';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -299,6 +302,7 @@ export default function EthiopiaMap({
   const [loadedRawLayerData, setLoadedRawLayerData] = useState<Record<string, any>>(rawLayerData ?? {});
   const [language, setLanguage] = useState<Language>('en');
   const [showSettings, setShowSettings] = useState(false);
+  const [priorityActive, setPriorityActive] = useState(false);
 
   const t = (key: TKey) => TRANSLATIONS[language][key];
 
@@ -769,7 +773,12 @@ export default function EthiopiaMap({
         {locationMode === 'points' && flatLeaves.length > 0 && (
           <RawPointsLayer leaves={flatLeaves} />
         )}
+
+        <PriorityHeatmap visible={priorityActive} />
       </MapContainer>
+
+      <PriorityToggle active={priorityActive} onToggle={() => setPriorityActive((v) => !v)} />
+      <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} />
     </section>
   );
 }
