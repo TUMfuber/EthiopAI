@@ -2,17 +2,17 @@ import XLSX from "xlsx";
 import initSqlJs from "sql.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, existsSync, mkdirSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, "..", "..", "..", "..");
+const EXCEL_PATH = join(PROJECT_ROOT, "Voluntary-Registry-Offsets-Database--v2026-04.xlsx");
 const OUTPUT_DIR = join(__dirname, "..", "..", "output");
 const DB_PATH = join(OUTPUT_DIR, "berkeley.db");
-const BERKELEY_URL = "https://gspp.berkeley.edu/assets/uploads/page/Voluntary-Registry-Offsets-Database--v2026-04.xlsx";
+const CACHE_PATH = join(OUTPUT_DIR, "berkeley-cache.json");
 
-// Header row is at index 3, data starts at index 4
 const HEADER_ROW = 3;
 
-// Column indices (0-based) from the PROJECTS tab
 const COL = {
   PROJECT_ID: 0,
   PROJECT_NAME: 1,
@@ -30,26 +30,31 @@ const COL = {
   CREDITS_ISSUED: 15,
   CREDITS_RETIRED: 16,
   CREDITS_REMAINING: 17,
-  ANNUAL_REDUCTIONS: 120, // "Estimated Annual Emission Reductions"
-  PROJECT_URL: 132, // "Project Website"
-  DESCRIPTION: 164, // "Project Description"
+  ANNUAL_REDUCTIONS: 120,
+  PROJECT_URL: 132,
+  DESCRIPTION: 164,
 };
 
 export async function fetchBerkeleyProjects() {
-  console.log("  Berkeley DB: downloading Excel...");
-  const res = await fetch(BERKELEY_URL);
-  if (!res.ok) throw new Error(`Berkeley download failed: ${res.status}`);
+  // Skip if already cached
+  if (existsSync(CACHE_PATH)) {
+    const cached = JSON.parse((await import("fs")).readFileSync(CACHE_PATH, "utf-8"));
+    console.log(`  Berkeley DB: using cached ${cached.length} projects`);
+    return cached;
+  }
 
-  const buffer = await res.arrayBuffer();
-  const workbook = XLSX.read(Buffer.from(buffer), { type: "buffer" });
+  console.log(`  Berkeley DB: reading local Excel...`);
+  if (!existsSync(EXCEL_PATH)) {
+    console.log(`  Berkeley DB: Excel not found at ${EXCEL_PATH}`);
+    return [];
+  }
+
+  const workbook = XLSX.readFile(EXCEL_PATH);
   const sheet = workbook.Sheets["PROJECTS"];
   const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-  // Data rows start after header (row 3)
   const dataRows = allRows.slice(HEADER_ROW + 1);
-  console.log(`  Berkeley DB: ${dataRows.length} project rows`);
+  console.log(`  Berkeley DB: ${dataRows.length} rows`);
 
-  // Load into SQLite
   const SQL = await initSqlJs();
   const db = new SQL.Database();
 
@@ -88,9 +93,7 @@ export async function fetchBerkeleyProjects() {
 
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(DB_PATH, Buffer.from(db.export()));
-  console.log(`  Berkeley DB: SQLite saved`);
 
-  // Query Ethiopia + target types
   const results = db.exec(`
     SELECT * FROM projects
     WHERE country LIKE '%Ethiopia%'
@@ -107,6 +110,7 @@ export async function fetchBerkeleyProjects() {
 
   if (!results.length || !results[0].values.length) {
     console.log(`  Berkeley DB: 0 matching projects`);
+    writeFileSync(CACHE_PATH, "[]");
     return [];
   }
 
@@ -140,5 +144,6 @@ export async function fetchBerkeleyProjects() {
   });
 
   console.log(`  Berkeley DB: ${mapped.length} Ethiopia projects found`);
+  writeFileSync(CACHE_PATH, JSON.stringify(mapped, null, 2));
   return mapped;
 }
