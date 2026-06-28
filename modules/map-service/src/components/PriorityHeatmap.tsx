@@ -38,7 +38,8 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
 
     const px = map.latLngToContainerPoint([p.lat, p.lng]);
     const [r, g, b] = valueToRGB(p.value);
-    const alpha = Math.min(0.65, 0.3 + p.value * 0.4);
+    const baseAlpha = zoom <= 6 ? 0.6 : zoom <= 7 ? 0.45 : zoom <= 8 ? 0.3 : 0.2;
+    const alpha = baseAlpha * (0.5 + p.value * 0.5);
     const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, radius);
     grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
     grad.addColorStop(0.7, `rgba(${r},${g},${b},${alpha * 0.3})`);
