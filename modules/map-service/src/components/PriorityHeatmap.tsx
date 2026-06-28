@@ -27,19 +27,32 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
 
   const bounds = map.getBounds();
   const zoom = map.getZoom();
-  // Cap at ~200 rendered points max
-  const step = zoom >= 9 ? 1 : zoom >= 8 ? 3 : zoom >= 7 ? 6 : zoom >= 6 ? 12 : 20;
+  const baseAlpha = zoom <= 6 ? 0.6 : zoom <= 7 ? 0.45 : zoom <= 8 ? 0.3 : 0.2;
 
-  let count = 0;
-  for (let i = 0; i < points.length; i += step) {
-    const p = points[i];
+  // Spatial binning: divide screen into grid cells, render one point per bin
+  const binSize = zoom >= 9 ? 0 : zoom >= 8 ? 20 : zoom >= 7 ? 40 : zoom >= 6 ? 60 : 80;
+  const bins = new Map<string, { px: L.Point; value: number }>();
+
+  for (const p of points) {
     if (p.lat < bounds.getSouth() || p.lat > bounds.getNorth() ||
         p.lng < bounds.getWest() || p.lng > bounds.getEast()) continue;
 
     const px = map.latLngToContainerPoint([p.lat, p.lng]);
-    const [r, g, b] = valueToRGB(p.value);
-    const baseAlpha = zoom <= 6 ? 0.6 : zoom <= 7 ? 0.45 : zoom <= 8 ? 0.3 : 0.2;
-    const alpha = baseAlpha * (0.5 + p.value * 0.5);
+
+    if (binSize > 0) {
+      const key = `${Math.floor(px.x / binSize)},${Math.floor(px.y / binSize)}`;
+      const existing = bins.get(key);
+      if (!existing || p.value > existing.value) {
+        bins.set(key, { px, value: p.value });
+      }
+    } else {
+      bins.set(`${px.x},${px.y}`, { px, value: p.value });
+    }
+  }
+
+  for (const { px, value } of bins.values()) {
+    const [r, g, b] = valueToRGB(value);
+    const alpha = baseAlpha * (0.5 + value * 0.5);
     const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, radius);
     grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
     grad.addColorStop(0.7, `rgba(${r},${g},${b},${alpha * 0.3})`);
@@ -48,7 +61,6 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
     ctx.beginPath();
     ctx.arc(px.x, px.y, radius, 0, Math.PI * 2);
     ctx.fill();
-    count++;
   }
 }
 
