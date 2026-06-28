@@ -1,96 +1,105 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useMap } from 'react-leaflet';
+import { useMap, useMapEvent } from 'react-leaflet';
 import L from 'leaflet';
 
 interface HeatPoint { lat: number; lng: number; value: number; }
 
-function createHeatCanvas(map: L.Map, points: HeatPoint[], radius: number): L.Layer {
-  const CanvasLayer = L.GridLayer.extend({
-    createTile(coords: L.Coords) {
-      const tile = document.createElement('canvas');
-      const size = this.getTileSize();
-      tile.width = size.x;
-      tile.height = size.y;
-      const ctx = tile.getContext('2d')!;
-
-      const nw = map.unproject([coords.x * size.x, coords.y * size.y], coords.z);
-      const se = map.unproject([(coords.x + 1) * size.x, (coords.y + 1) * size.y], coords.z);
-      const pad = radius * 2;
-
-      for (const p of points) {
-        if (p.lat < se.lat - 1 || p.lat > nw.lat + 1 || p.lng < nw.lng - 1 || p.lng > se.lng + 1) continue;
-        const px = map.project([p.lat, p.lng], coords.z);
-        const x = px.x - coords.x * size.x;
-        const y = px.y - coords.y * size.y;
-        if (x < -pad || x > size.x + pad || y < -pad || y > size.y + pad) continue;
-
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        const alpha = Math.min(0.7, p.value * 0.8);
-        const color = valueToColor(p.value);
-        grad.addColorStop(0, `rgba(${color},${alpha})`);
-        grad.addColorStop(1, `rgba(${color},0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      return tile;
-    },
-  });
-
-  return new (CanvasLayer as any)({ opacity: 0.75, pane: 'overlayPane' });
+function valueToRGB(v: number): [number, number, number] {
+  const c = Math.max(0, Math.min(1, v));
+  if (c < 0.25) return [0, Math.round(204 + c * 4 * 51), 0];
+  if (c < 0.5) { const t = (c - 0.25) * 4; return [Math.round(t * 255), 255, 0]; }
+  if (c < 0.75) { const t = (c - 0.5) * 4; return [255, Math.round(255 - t * 115), 0]; }
+  const t = (c - 0.75) * 4;
+  return [255, Math.round(140 - t * 140), 0];
 }
 
-function valueToColor(v: number): string {
-  const clamped = Math.max(0, Math.min(1, v));
-  let r: number, g: number, b: number;
-  if (clamped < 0.33) {
-    const t = clamped / 0.33;
-    r = Math.round(t * 255); g = 204 + Math.round(t * 51); b = Math.round((1 - t) * 0);
-  } else if (clamped < 0.66) {
-    const t = (clamped - 0.33) / 0.33;
-    r = 255; g = Math.round(255 - t * 115); b = 0;
-  } else {
-    const t = (clamped - 0.66) / 0.34;
-    r = 255; g = Math.round(140 - t * 140); b = 0;
+function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[], radius: number) {
+  const size = map.getSize();
+  canvas.width = size.x;
+  canvas.height = size.y;
+  canvas.style.width = size.x + 'px';
+  canvas.style.height = size.y + 'px';
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, size.x, size.y);
+
+  const bounds = map.getBounds();
+  const pad = 2; // degrees padding
+  const visiblePoints = points.filter(p =>
+    p.lat >= bounds.getSouth() - pad && p.lat <= bounds.getNorth() + pad &&
+    p.lng >= bounds.getWest() - pad && p.lng <= bounds.getEast() + pad
+  );
+
+  for (const p of visiblePoints) {
+    const px = map.latLngToContainerPoint([p.lat, p.lng]);
+    const [r, g, b] = valueToRGB(p.value);
+    const alpha = Math.min(0.65, 0.3 + p.value * 0.4);
+    const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, radius);
+    grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+    grad.addColorStop(0.6, `rgba(${r},${g},${b},${alpha * 0.5})`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(px.x, px.y, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
-  return `${r},${g},${b}`;
 }
 
 export default function PriorityHeatmap({ visible }: { visible: boolean }) {
   const map = useMap();
-  const layerRef = useRef<L.Layer | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [points, setPoints] = useState<HeatPoint[]>([]);
 
+  // Load data
   useEffect(() => {
     if (!visible || points.length > 0) return;
     fetch('/data/priority-heatmap.geojson')
       .then(r => r.json())
       .then(data => {
         setPoints((data.features ?? []).map((f: any) => ({
-          lat: f.properties.lat,
-          lng: f.properties.lng,
-          value: f.properties.priority,
+          lat: f.properties.lat, lng: f.properties.lng, value: f.properties.priority,
         })));
       })
       .catch(console.error);
   }, [visible, points.length]);
 
+  // Create canvas overlay
   useEffect(() => {
-    if (!visible || points.length === 0) {
-      if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; }
+    if (!visible) {
+      if (canvasRef.current) { canvasRef.current.remove(); canvasRef.current = null; }
       return;
     }
+    if (!canvasRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.style.position = 'absolute';
+      canvas.style.top = '0';
+      canvas.style.left = '0';
+      canvas.style.pointerEvents = 'none';
+      canvas.style.zIndex = '400';
+      map.getContainer().querySelector('.leaflet-overlay-pane')?.appendChild(canvas);
+      canvasRef.current = canvas;
+    }
+    return () => { if (canvasRef.current) { canvasRef.current.remove(); canvasRef.current = null; } };
+  }, [visible, map]);
 
-    if (layerRef.current) map.removeLayer(layerRef.current);
-    const layer = createHeatCanvas(map, points, 25);
-    layer.addTo(map);
-    layerRef.current = layer;
+  // Redraw on move/zoom
+  const redraw = () => {
+    if (!canvasRef.current || !visible || points.length === 0) return;
+    const zoom = map.getZoom();
+    const radius = Math.max(12, Math.min(40, 20 + (zoom - 6) * 5));
+    drawHeatmap(canvasRef.current, map, points, radius);
 
-    return () => { if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; } };
-  }, [visible, points, map]);
+    // Position canvas at map origin
+    const topLeft = map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(canvasRef.current, topLeft);
+  };
+
+  useMapEvent('moveend', redraw);
+  useMapEvent('zoomend', redraw);
+
+  useEffect(() => { if (visible && points.length > 0) redraw(); }, [visible, points]);
 
   return null;
 }
