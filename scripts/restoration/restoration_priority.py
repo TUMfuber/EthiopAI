@@ -589,6 +589,25 @@ def output_score(value: float | None) -> int | None:
     return None if value is None else round(100 * clamp(value))
 
 
+def _fallback_carbon(climate_suitability, indicators):
+    """Carbon proxy when NDVI unavailable: climate × (1-trees) × eligibility."""
+    cs = climate_suitability if climate_suitability is not None else 0
+    tree = safe_float(indicators.get("tree_fraction")) or 0
+    elig = safe_float(indicators.get("landcover_eligibility")) or 0
+    v = cs * (1 - tree) * elig
+    return round(v * 100) if v > 0 else None
+
+
+def _fallback_water(indicators, stats):
+    """Water proxy when NDVI unavailable: rainfall × slope."""
+    rain = safe_float(indicators.get("seasonal_rainfall_mm")) or safe_float(indicators.get("annual_rainfall_mm"))
+    slope = safe_float(indicators.get("slope_p90"))
+    if rain is None or slope is None:
+        return None
+    v = clamp(rain / 400) * 0.6 + clamp(slope / 20) * 0.4
+    return round(v * 100) if v > 0 else None
+
+
 def compute_scores(
     cell: GridCell,
     indicators: dict[str, Any],
@@ -762,8 +781,8 @@ def compute_scores(
         "gating_applied": gating_applied,
         "landcover_eligibility": rounded(eligibility),
         "degraded_restorable_land_score": output_score(degraded_restorable),
-        "carbon_recovery_score": output_score(carbon_recovery),
-        "water_erosion_score": output_score(water_erosion_benefit),
+        "carbon_recovery_score": output_score(carbon_recovery) or _fallback_carbon(climate_suitability, indicators),
+        "water_erosion_score": output_score(water_erosion_benefit) or _fallback_water(indicators, stats),
         "biodiversity_livelihood_score": output_score(biodiversity_livelihood),
         "restoration_priority_score": None if priority_score is None else round(priority_score),
         "priority_class": score_class(priority_score),
