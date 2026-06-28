@@ -88,6 +88,13 @@ export default function AnalysisPanel({ lat, lng, view, visible, onClose }: Anal
           )}
         </div>
       )}
+
+      {data && (
+        <button onClick={() => (window as any).__ethopai_takeAction?.()}
+          style={{ marginTop: 12, width: '100%', padding: '12px', border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          🚀 Take Action
+        </button>
+      )}
     </div>
   );
 }

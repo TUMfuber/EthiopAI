@@ -16,6 +16,7 @@ import ViewSwitcher from './ViewSwitcher';
 import DropMarker from './DropMarker';
 import AnalysisPanel from './AnalysisPanel';
 import Tutorial from './Tutorial';
+import TakeActionModal from './TakeActionModal';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -314,6 +315,7 @@ export default function EthiopiaMap({
   const [dropMode, setDropMode] = useState(false);
   const [droppedPin, setDroppedPin] = useState<{ lat: number; lng: number } | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showAction, setShowAction] = useState(false);
 
   const t = (key: TKey) => TRANSLATIONS[language][key];
 
@@ -810,6 +812,8 @@ export default function EthiopiaMap({
       <PriorityToggle active={priorityActive} onToggle={() => setPriorityActive((v) => !v)} />
       <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} onResults={setActionPoints} />
       <AnalysisPanel lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} visible={!!droppedPin} onClose={() => setDroppedPin(null)} />
+      <TakeActionModal visible={showAction} onClose={() => setShowAction(false)} location={droppedPin ? `${droppedPin.lat.toFixed(2)}°N, ${droppedPin.lng.toFixed(2)}°E` : ''} lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} />
+      {typeof window !== 'undefined' && ((window as any).__ethopai_takeAction = () => setShowAction(true)) && null}
       <Tutorial visible={showTutorial} onClose={() => setShowTutorial(false)} />
     </section>
   );
