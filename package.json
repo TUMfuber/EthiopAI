@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1075.0",
+    "@aws-sdk/client-dynamodb": "^3.654.0",
     "leaflet": "^1.9.4",
     "next": "^16.2.9",
     "react": "^19.2.7",

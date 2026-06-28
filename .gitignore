@@ -1,12 +1,30 @@
-.next
-node_modules
-*.tsbuildinfo
-modules/data-collection/.env
+# Dependencies
+node_modules/
 
-# Local/runtime files
+# Next.js
+.next/
+*.tsbuildinfo
+
+# Environment
 .env
 .env.local
 scripts/.env
-scripts/.venv
-scripts/**/__pycache__
+
+# Python
+.venv/
+scripts/.venv/
+scripts/**/__pycache__/
 scripts/**/*.pyc
+
+# Temporary files
+tmp_*
+
+# Secrets & deploy artifacts
+*.pem
+lambda.zip
+
+# Output
+output/
+
+# Module-specific
+modules/data-collection/.env

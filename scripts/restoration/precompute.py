@@ -9,6 +9,7 @@ from typing import Any
 
 from .utils import PRECOMPUTED_DIR, feature_collection
 from .restoration_priority import (
+    GRID_CELL_KM,
     INDICATOR_PATH,
     COMPUTED_LAYER_SCORE_FIELDS,
     GridCell,
@@ -77,6 +78,10 @@ def precompute_restoration_layers(options: PrecomputeOptions) -> dict[str, Any]:
         scored_features.append(grid_feature(cell, compute_scores(cell, indicators, stats, ndvi_refs)))
 
     write_geojson(INDICATOR_PATH, feature_collection(indicator_features))
+
+    print("Applying spatial smoothing...", file=sys.stderr, flush=True)
+    scored_features = smooth_scores(scored_features, cells)
+
     write_geojson(SCORED_GRID_PATH, feature_collection(scored_features))
     layer_paths = write_layer_geojsons(scored_features)
     indicator_cache.cache_clear()
@@ -164,6 +169,51 @@ def load_indicator_cache() -> dict[str, dict[str, Any]]:
 def write_geojson(path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+
+
+def smooth_scores(scored_features: list[dict[str, Any]], cells: list) -> list[dict[str, Any]]:
+    """Gaussian-weighted spatial smoothing of score fields across neighbors."""
+    score_fields = [
+        "restoration_priority_score",
+        "degraded_restorable_land_score",
+        "carbon_recovery_score",
+        "water_erosion_score",
+        "biodiversity_livelihood_score",
+    ]
+    sigma_km = GRID_CELL_KM * 1.2  # smooth over ~1.2 cells radius
+
+    # Build spatial index
+    coords = [(c.lon, c.lat) for c in cells]
+    smoothed = []
+
+    for i, feature in enumerate(scored_features):
+        props = dict(feature.get("properties", {}))
+        lon_i, lat_i = coords[i]
+
+        for field in score_fields:
+            val = props.get(field)
+            if val is None:
+                continue
+
+            total_weight = 0.0
+            weighted_sum = 0.0
+            for j, (lon_j, lat_j) in enumerate(coords):
+                neighbor_val = scored_features[j].get("properties", {}).get(field)
+                if neighbor_val is None:
+                    continue
+                dist = km_distance(lon_i, lat_i, lon_j, lat_j)
+                if dist > sigma_km * 3:
+                    continue
+                w = math.exp(-(dist * dist) / (2 * sigma_km * sigma_km))
+                weighted_sum += neighbor_val * w
+                total_weight += w
+
+            if total_weight > 0:
+                props[field] = round(weighted_sum / total_weight, 1)
+
+        smoothed.append({**feature, "properties": props})
+
+    return smoothed
 
 
 def write_layer_geojsons(scored_features: list[dict[str, Any]]) -> dict[str, Any]:

@@ -7,6 +7,17 @@ import EthopaiLayerRenderer from './EthopaiLayerRenderer';
 import { buildEthiopiaExample, loadProjectPoints } from './ethiopiaExample';
 import PriorityOverlays, { type PriorityZones } from './PriorityOverlays';
 import ProjectMarkers, { type Project } from './ProjectMarkers';
+import PriorityHeatmap from './PriorityHeatmap';
+import RecommendationPanel from './RecommendationPanel';
+import PriorityToggle from './PriorityToggle';
+import ActionPointMarkers, { type ActionPoint } from './ActionPointMarkers';
+import DetailLayer from './DetailLayer';
+import ViewSwitcher from './ViewSwitcher';
+import DropMarker from './DropMarker';
+import AnalysisPanel from './AnalysisPanel';
+import Tutorial from './Tutorial';
+import TakeActionModal from './TakeActionModal';
+import MapLegend from './MapLegend';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -292,13 +303,20 @@ export default function EthiopiaMap({
   const [clusterNodes, setClusterNodes] = useState<Array<ClusterNode | LeafNode>>([]);
   const [locationMode, setLocationMode] = useState<LocationMode>('clustered');
   const [clusterColorMode, setClusterColorMode] = useState<ClusterColorMode>('average');
-  const [regionFilterEnabled, setRegionFilterEnabled] = useState(true);
+  const [regionFilterEnabled, setRegionFilterEnabled] = useState(false);
   const [loadedEthopaiLayerData, setLoadedEthopaiLayerData] = useState<Record<string, any>>({});
   const [rawLayerSelectorEnabled, setRawLayerSelectorEnabled] = useState(false);
   const [selectedRawLayerIds, setSelectedRawLayerIds] = useState<string[]>(visibleRawLayerIds);
   const [loadedRawLayerData, setLoadedRawLayerData] = useState<Record<string, any>>(rawLayerData ?? {});
   const [language, setLanguage] = useState<Language>('en');
   const [showSettings, setShowSettings] = useState(false);
+  const [priorityActive, setPriorityActive] = useState(false);
+  const [actionPoints, setActionPoints] = useState<ActionPoint[]>([]);
+  const [activeView, setActiveView] = useState<'ngo' | 'investor'>('ngo');
+  const [dropMode, setDropMode] = useState(false);
+  const [droppedPin, setDroppedPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [showAction, setShowAction] = useState(false);
 
   const t = (key: TKey) => TRANSLATIONS[language][key];
 
@@ -696,7 +714,11 @@ export default function EthiopiaMap({
         scrollWheelZoom={true}
         className="ethiopia-map"
       >
-        <TileLayer key={mode} attribution={tile.attribution} url={tile.url} />
+        <TileLayer
+          key={priorityActive ? 'satellite' : mode}
+          attribution={priorityActive ? '&copy; Esri' : tile.attribution}
+          url={priorityActive ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' : tile.url}
+        />
 
         {/* Region borders — visible in all modes when region filtering is enabled */}
         {regionFilterEnabled && adminBoundary &&
@@ -769,7 +791,35 @@ export default function EthiopiaMap({
         {locationMode === 'points' && flatLeaves.length > 0 && (
           <RawPointsLayer leaves={flatLeaves} />
         )}
+
+        <DetailLayer visible={priorityActive} />
+        <ActionPointMarkers points={actionPoints} />
+        <DropMarker active={dropMode} onDrop={(lat, lng) => { setDroppedPin({ lat, lng }); setDropMode(false); }} />
       </MapContainer>
+
+      <ViewSwitcher activeView={activeView} onChange={setActiveView} />
+
+      {/* Drop pin button */}
+      <button
+        onClick={() => setDropMode(d => !d)}
+        title="Drop a pin to analyze"
+        style={{
+          position: 'absolute', bottom: 140, right: 16, zIndex: 1000,
+          width: 42, height: 42, border: 'none', borderRadius: 10,
+          cursor: 'pointer', fontSize: 20,
+          background: dropMode ? '#dcfce7' : 'white',
+          outline: dropMode ? '2px solid #16a34a' : '2px solid transparent',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+        }}
+      >📍</button>
+
+      <PriorityToggle active={priorityActive} onToggle={() => setPriorityActive((v) => !v)} />
+      <MapLegend view={activeView} />
+      <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} onResults={setActionPoints} />
+      <AnalysisPanel lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} visible={!!droppedPin} onClose={() => setDroppedPin(null)} />
+      <TakeActionModal visible={showAction} onClose={() => setShowAction(false)} location={droppedPin ? `${droppedPin.lat.toFixed(2)}°N, ${droppedPin.lng.toFixed(2)}°E` : ''} lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} />
+      {typeof window !== 'undefined' && ((window as any).__ethopai_takeAction = () => setShowAction(true)) && null}
+      <Tutorial visible={showTutorial} onClose={() => setShowTutorial(false)} />
     </section>
   );
 }
