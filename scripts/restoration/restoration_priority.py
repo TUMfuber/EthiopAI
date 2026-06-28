@@ -24,9 +24,9 @@ INDICATOR_PATH = RESOURCES_DIR / "precomputed" / "restoration_indicators.geojson
 
 def configured_grid_cell_km() -> float:
     try:
-        return max(0.25, float(os.getenv("RESTORATION_GRID_CELL_KM", "50.0")))
+        return max(0.25, float(os.getenv("RESTORATION_GRID_CELL_KM", "20.0")))
     except ValueError:
-        return 8.0
+        return 20.0
 
 
 # The model is grid-size agnostic. The default stays coarse enough for direct
