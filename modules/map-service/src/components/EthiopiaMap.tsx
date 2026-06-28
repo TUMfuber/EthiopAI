@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, useMap, useMapEvent } from 'react-leaflet';
 import ClusterLayer, { type ClusterColorMode, type ClusterNode, type LeafNode, weightToColor } from './ClusterLayer';
 import EthopaiLayerRenderer from './EthopaiLayerRenderer';
-import { buildEthiopiaExample } from './ethiopiaExample';
+import { buildEthiopiaExample, loadProjectPoints } from './ethiopiaExample';
 import PriorityOverlays, { type PriorityZones } from './PriorityOverlays';
 import ProjectMarkers, { type Project } from './ProjectMarkers';
 import RawLayerRenderer from './RawLayerRenderer';
@@ -315,10 +315,11 @@ export default function EthiopiaMap({
     if (adminBoundary) return;
     fetch('/api/layers/admin_boundaries')
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         setAdminBoundary(data);
         const names: string[] = data.features.map((f: any) => f.properties?.shapeName ?? '');
         setSelectedRegions(new Set(names));
+        await loadProjectPoints();
         setClusterNodes(buildEthiopiaExample(data.features));
       })
       .catch((e) => console.error('Failed to load admin boundary:', e));

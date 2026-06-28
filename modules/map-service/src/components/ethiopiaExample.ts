@@ -1,58 +1,56 @@
 import { AdminRegionStrategy, BuildConfig, buildClusterTree, InputPoint } from './clustering';
 import type { ClusterNode, LeafNode } from './ClusterLayer';
 
-// ── Seeded RNG ────────────────────────────────────────────────────────────────
+// ── Load real project points ──────────────────────────────────────────────────
 
-function lcg(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
-    return s / 0x100000000;
-  };
+let cachedPoints: InputPoint[] | null = null;
+
+export async function loadProjectPoints(): Promise<InputPoint[]> {
+  if (cachedPoints) return cachedPoints;
+
+  try {
+    const res = await fetch('/data/projects.json');
+    if (!res.ok) return [];
+    const data = await res.json();
+    cachedPoints = data
+      .filter((p: any) => p.lat && p.lng)
+      .map((p: any) => ({
+        id: String(p.id),
+        lat: p.lat,
+        lng: p.lng,
+        label: p.name,
+        weight: p.creditsIssued
+          ? Math.min(p.creditsIssued / 10000000, 1)
+          : 0.3,
+      }));
+    return cachedPoints!;
+  } catch {
+    return [];
+  }
 }
 
-// ── Flat point generation ─────────────────────────────────────────────────────
+// ── Fallback: generate flat points from already-fetched data ──────────────────
 
-const ETHIOPIA_BOX = { latMin: 3.4, latMax: 14.9, lngMin: 33.0, lngMax: 47.9 };
-const TOTAL_POINTS = 2465;
-
-/**
- * Generate random points scattered across Ethiopia's bounding box.
- * Points outside actual borders are still generated — AdminRegionStrategy
- * will assign those to "Other" during clustering.
- */
-export function generateFlatPoints(seed = 42): InputPoint[] {
-  const rand = lcg(seed);
-  const { latMin, latMax, lngMin, lngMax } = ETHIOPIA_BOX;
-  return Array.from({ length: TOTAL_POINTS }, (_, i) => ({
-    id: `pt-${i}`,
-    lat: latMin + rand() * (latMax - latMin),
-    lng: lngMin + rand() * (lngMax - lngMin),
-    label: `Point ${i + 1}`,
-    weight: rand(),
-  }));
+export function generateFlatPoints(): InputPoint[] {
+  // Return cached if available, otherwise empty (async load hasn't completed)
+  return cachedPoints ?? [];
 }
 
 // ── Cluster tree ──────────────────────────────────────────────────────────────
 
 const CLUSTER_CONFIG: BuildConfig = {
-  maxDepth: 2,       // level 0 = admin region, level 1 = grid zone, level 2 = leaves
-  minClusterSize: 5, // groups of ≤5 points become leaves directly
+  maxDepth: 2,
+  minClusterSize: 3,
 };
 
 /**
- * Build the Ethiopia example cluster tree.
- * Call this once the admin GeoJSON features are available.
- *
- * Strategy:
- *   depth 0 → AdminRegionStrategy  (groups by shapeName via PiP)
- *   depth 1 → GridStrategy(3)      (3×3 grid sub-zones within each region)
- *   depth 2 → leaves
+ * Build the cluster tree from real project data.
  */
 export function buildEthiopiaExample(
   adminFeatures: any[],
 ): Array<ClusterNode | LeafNode> {
   const points = generateFlatPoints();
+  if (points.length === 0) return [];
   const strategy = new AdminRegionStrategy(adminFeatures);
   return buildClusterTree(points, strategy, CLUSTER_CONFIG);
 }
