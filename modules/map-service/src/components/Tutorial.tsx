@@ -22,7 +22,7 @@ export default function Tutorial({ visible, onClose }: { visible: boolean; onClo
   };
 
   if (!show) return (
-    <button onClick={() => setShow(true)} style={{ position: 'fixed', bottom: 80, right: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#1a73e8', color: '#fff', fontSize: 18, cursor: 'pointer', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</button>
+    <button onClick={() => setShow(true)} style={{ position: 'fixed', bottom: 80, left: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#1a73e8', color: '#fff', fontSize: 18, cursor: 'pointer', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</button>
   );
 
   return (
@@ -41,7 +41,7 @@ export default function Tutorial({ visible, onClose }: { visible: boolean; onClo
           </div>
         </div>
       </div>
-      <button onClick={() => setShow(true)} style={{ position: 'fixed', bottom: 80, right: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#1a73e8', color: '#fff', fontSize: 18, cursor: 'pointer', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</button>
+      <button onClick={() => setShow(true)} style={{ position: 'fixed', bottom: 80, left: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#1a73e8', color: '#fff', fontSize: 18, cursor: 'pointer', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</button>
     </>
   );
 }
