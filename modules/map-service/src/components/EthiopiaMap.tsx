@@ -12,6 +12,10 @@ import RecommendationPanel from './RecommendationPanel';
 import PriorityToggle from './PriorityToggle';
 import ActionPointMarkers, { type ActionPoint } from './ActionPointMarkers';
 import DetailLayer from './DetailLayer';
+import ViewSwitcher from './ViewSwitcher';
+import DropMarker from './DropMarker';
+import AnalysisPanel from './AnalysisPanel';
+import Tutorial from './Tutorial';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -306,6 +310,10 @@ export default function EthiopiaMap({
   const [showSettings, setShowSettings] = useState(false);
   const [priorityActive, setPriorityActive] = useState(false);
   const [actionPoints, setActionPoints] = useState<ActionPoint[]>([]);
+  const [activeView, setActiveView] = useState<'ngo' | 'investor'>('ngo');
+  const [dropMode, setDropMode] = useState(false);
+  const [droppedPin, setDroppedPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const t = (key: TKey) => TRANSLATIONS[language][key];
 
@@ -780,10 +788,29 @@ export default function EthiopiaMap({
         <PriorityHeatmap visible={priorityActive} />
         <DetailLayer visible={priorityActive} />
         <ActionPointMarkers points={actionPoints} />
+        <DropMarker active={dropMode} onDrop={(lat, lng) => { setDroppedPin({ lat, lng }); setDropMode(false); }} />
       </MapContainer>
+
+      <ViewSwitcher activeView={activeView} onChange={setActiveView} />
+
+      {/* Drop pin button */}
+      <button
+        onClick={() => setDropMode(d => !d)}
+        title="Drop a pin to analyze"
+        style={{
+          position: 'absolute', bottom: 140, right: 16, zIndex: 1000,
+          width: 42, height: 42, border: 'none', borderRadius: 10,
+          cursor: 'pointer', fontSize: 20,
+          background: dropMode ? '#dcfce7' : 'white',
+          outline: dropMode ? '2px solid #16a34a' : '2px solid transparent',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+        }}
+      >📍</button>
 
       <PriorityToggle active={priorityActive} onToggle={() => setPriorityActive((v) => !v)} />
       <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} onResults={setActionPoints} />
+      <AnalysisPanel lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} visible={!!droppedPin} onClose={() => setDroppedPin(null)} />
+      <Tutorial visible={showTutorial} onClose={() => setShowTutorial(false)} />
     </section>
   );
 }
