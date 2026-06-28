@@ -1,55 +1,53 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { GeoJSON } from 'react-leaflet';
-
-function interpolateColor(priority: number): string {
-  const stops = [
-    { val: 0.0, r: 0x00, g: 0xcc, b: 0x00 },
-    { val: 0.4, r: 0xff, g: 0xff, b: 0x00 },
-    { val: 0.7, r: 0xff, g: 0x8c, b: 0x00 },
-    { val: 1.0, r: 0xff, g: 0x00, b: 0x00 },
-  ];
-  const p = Math.max(0, Math.min(1, priority));
-  let lower = stops[0], upper = stops[stops.length - 1];
-  for (let i = 0; i < stops.length - 1; i++) {
-    if (p >= stops[i].val && p <= stops[i + 1].val) { lower = stops[i]; upper = stops[i + 1]; break; }
-  }
-  const t = upper.val === lower.val ? 0 : (p - lower.val) / (upper.val - lower.val);
-  const r = Math.round(lower.r + t * (upper.r - lower.r));
-  const g = Math.round(lower.g + t * (upper.g - lower.g));
-  const b = Math.round(lower.b + t * (upper.b - lower.b));
-  return `rgb(${r},${g},${b})`;
-}
+import { useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet.heat';
 
 export default function PriorityHeatmap({ visible }: { visible: boolean }) {
-  const [data, setData] = useState<any>(null);
+  const map = useMap();
+  const [layer, setLayer] = useState<any>(null);
+  const [points, setPoints] = useState<[number, number, number][]>([]);
 
   useEffect(() => {
-    if (!visible || data) return;
+    if (!visible || points.length > 0) return;
     fetch('/data/priority-heatmap.geojson')
       .then(r => r.json())
-      .then(setData)
+      .then(data => {
+        const pts: [number, number, number][] = (data.features ?? []).map((f: any) => [
+          f.properties.lat,
+          f.properties.lng,
+          f.properties.priority,
+        ]);
+        setPoints(pts);
+      })
       .catch(console.error);
-  }, [visible, data]);
+  }, [visible, points.length]);
 
-  if (!visible || !data) return null;
+  useEffect(() => {
+    if (!visible || points.length === 0) {
+      if (layer) { map.removeLayer(layer); setLayer(null); }
+      return;
+    }
+    if (layer) return;
 
-  return (
-    <GeoJSON
-      key="priority-heatmap"
-      data={data}
-      style={(feature: any) => {
-        const color = interpolateColor(feature?.properties?.priority ?? 0);
-        return { fillColor: color, fillOpacity: 0.55, color: color, weight: 0, opacity: 0 };
-      }}
-      onEachFeature={(feature, layer) => {
-        const p = feature.properties;
-        layer.bindTooltip(
-          `<b>${p.location}</b><br/>Priority: ${(p.priority * 100).toFixed(0)}%<br/>Category: ${p.category}`,
-          { sticky: true }
-        );
-      }}
-    />
-  );
+    const heat = (L as any).heatLayer(points, {
+      radius: 30,
+      blur: 20,
+      maxZoom: 10,
+      max: 1.0,
+      gradient: { 0.0: '#00cc00', 0.3: '#7aff00', 0.5: '#ffff00', 0.7: '#ff8c00', 1.0: '#ff0000' },
+    }).addTo(map);
+    setLayer(heat);
+
+    return () => { map.removeLayer(heat); };
+  }, [visible, points, map, layer]);
+
+  // Remove layer when toggled off
+  useEffect(() => {
+    if (!visible && layer) { map.removeLayer(layer); setLayer(null); }
+  }, [visible, layer, map]);
+
+  return null;
 }
