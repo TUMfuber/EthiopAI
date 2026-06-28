@@ -11,6 +11,7 @@ import PriorityHeatmap from './PriorityHeatmap';
 import RecommendationPanel from './RecommendationPanel';
 import PriorityToggle from './PriorityToggle';
 import ActionPointMarkers, { type ActionPoint } from './ActionPointMarkers';
+import DetailLayer from './DetailLayer';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -777,6 +778,7 @@ export default function EthiopiaMap({
         )}
 
         <PriorityHeatmap visible={priorityActive} />
+        <DetailLayer visible={priorityActive} />
         <ActionPointMarkers points={actionPoints} />
       </MapContainer>
 
