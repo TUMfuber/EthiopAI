@@ -87,8 +87,12 @@ export default function PriorityHeatmap({ visible }: { visible: boolean }) {
   // Redraw on move/zoom
   const redraw = () => {
     if (!canvasRef.current || !visible || points.length === 0) return;
-    const zoom = map.getZoom();
-    const radius = Math.max(12, Math.min(40, 20 + (zoom - 6) * 5));
+    // Radius in pixels = half the grid spacing at current zoom
+    // Grid is ~0.15° apart; convert to pixels at current zoom
+    const p1 = map.latLngToContainerPoint([9, 38]);
+    const p2 = map.latLngToContainerPoint([9.15, 38]);
+    const gridPixels = Math.abs(p2.y - p1.y);
+    const radius = Math.max(10, gridPixels * 1.2);
     drawHeatmap(canvasRef.current, map, points, radius);
 
     // Position canvas at map origin
