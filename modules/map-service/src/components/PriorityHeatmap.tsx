@@ -29,13 +29,17 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
   const zoom = map.getZoom();
   const baseAlpha = zoom <= 6 ? 0.6 : zoom <= 7 ? 0.45 : zoom <= 8 ? 0.3 : 0.2;
 
+  // Pad bounds so gradients at edges bleed in
+  const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.3;
+  const padLng = (bounds.getEast() - bounds.getWest()) * 0.3;
+
   // Spatial binning: divide screen into grid cells, render one point per bin
   const binSize = zoom >= 9 ? 0 : zoom >= 8 ? 20 : zoom >= 7 ? 40 : zoom >= 6 ? 60 : 80;
   const bins = new Map<string, { px: L.Point; value: number }>();
 
   for (const p of points) {
-    if (p.lat < bounds.getSouth() || p.lat > bounds.getNorth() ||
-        p.lng < bounds.getWest() || p.lng > bounds.getEast()) continue;
+    if (p.lat < bounds.getSouth() - padLat || p.lat > bounds.getNorth() + padLat ||
+        p.lng < bounds.getWest() - padLng || p.lng > bounds.getEast() + padLng) continue;
 
     const px = map.latLngToContainerPoint([p.lat, p.lng]);
 
