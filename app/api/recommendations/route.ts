@@ -8,6 +8,24 @@ const bedrock = new BedrockRuntimeClient({ region: 'us-west-2' });
 const dynamo = new DynamoDBClient({ region: 'us-west-2' });
 const TABLE = 'ethopai-recommendations';
 
+function jitter() {
+  return (Math.random() - 0.5) * 0.1; // ±0.05°
+}
+
+function shuffleSimilar(zones: any[]) {
+  for (let i = 0; i < zones.length; i++) {
+    let j = i;
+    while (j < zones.length && Math.abs(zones[j].priority - zones[i].priority) < 0.05) j++;
+    // Fisher-Yates shuffle within the similar block
+    for (let k = j - 1; k > i; k--) {
+      const r = i + Math.floor(Math.random() * (k - i + 1));
+      [zones[k], zones[r]] = [zones[r], zones[k]];
+    }
+    i = j - 1;
+  }
+  return zones;
+}
+
 function loadTopZones(filters: string[]) {
   const raw = readFileSync(join(process.cwd(), 'public/data/priority-heatmap.geojson'), 'utf-8');
   const geojson = JSON.parse(raw);
@@ -15,16 +33,17 @@ function loadTopZones(filters: string[]) {
   const filtered = filters.length > 0
     ? features.filter((f: any) => filters.some(cat => f.properties.category?.toLowerCase() === cat))
     : features;
-  return filtered
+  const sorted = filtered
     .sort((a: any, b: any) => (b.properties.priority ?? 0) - (a.properties.priority ?? 0))
-    .slice(0, 10)
+    .slice(0, 20)
     .map((f: any) => ({
       priority: f.properties.priority,
       category: f.properties.category,
       location: f.properties.location ?? 'Unknown',
-      lat: f.properties.lat,
-      lng: f.properties.lng,
+      lat: (f.properties.lat ?? 0) + jitter(),
+      lng: (f.properties.lng ?? 0) + jitter(),
     }));
+  return shuffleSimilar(sorted);
 }
 
 async function getCached(key: string) {

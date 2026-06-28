@@ -17,6 +17,7 @@ import DropMarker from './DropMarker';
 import AnalysisPanel from './AnalysisPanel';
 import Tutorial from './Tutorial';
 import TakeActionModal from './TakeActionModal';
+import MapLegend from './MapLegend';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -713,7 +714,11 @@ export default function EthiopiaMap({
         scrollWheelZoom={true}
         className="ethiopia-map"
       >
-        <TileLayer key={mode} attribution={tile.attribution} url={tile.url} />
+        <TileLayer
+          key={priorityActive ? 'satellite' : mode}
+          attribution={priorityActive ? '&copy; Esri' : tile.attribution}
+          url={priorityActive ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' : tile.url}
+        />
 
         {/* Region borders — visible in all modes when region filtering is enabled */}
         {regionFilterEnabled && adminBoundary &&
@@ -810,6 +815,7 @@ export default function EthiopiaMap({
       >📍</button>
 
       <PriorityToggle active={priorityActive} onToggle={() => setPriorityActive((v) => !v)} />
+      <MapLegend view={activeView} />
       <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} onResults={setActionPoints} />
       <AnalysisPanel lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} visible={!!droppedPin} onClose={() => setDroppedPin(null)} />
       <TakeActionModal visible={showAction} onClose={() => setShowAction(false)} location={droppedPin ? `${droppedPin.lat.toFixed(2)}°N, ${droppedPin.lng.toFixed(2)}°E` : ''} lat={droppedPin?.lat ?? 0} lng={droppedPin?.lng ?? 0} view={activeView} />
