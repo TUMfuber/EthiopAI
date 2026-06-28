@@ -119,8 +119,10 @@ export default function PriorityHeatmap({ visible }: { visible: boolean }) {
     // Position canvas at map origin
     const topLeft = map.containerPointToLayerPoint([0, 0]);
     L.DomUtil.setPosition(canvasRef.current, topLeft);
+    canvasRef.current.style.opacity = '1';
   };
 
+  useMapEvent('movestart', () => { if (canvasRef.current) canvasRef.current.style.opacity = '0'; });
   useMapEvent('moveend', redraw);
   useMapEvent('zoomend', redraw);
 
