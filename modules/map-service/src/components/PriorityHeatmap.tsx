@@ -27,8 +27,8 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
 
   const bounds = map.getBounds();
   const zoom = map.getZoom();
-  // At low zoom, skip points to keep max ~500 rendered
-  const step = zoom >= 8 ? 1 : zoom >= 7 ? 2 : zoom >= 6 ? 4 : 8;
+  // Cap at ~200 rendered points max
+  const step = zoom >= 9 ? 1 : zoom >= 8 ? 3 : zoom >= 7 ? 6 : zoom >= 6 ? 12 : 20;
 
   let count = 0;
   for (let i = 0; i < points.length; i += step) {
@@ -92,7 +92,6 @@ export default function PriorityHeatmap({ visible }: { visible: boolean }) {
   const redraw = () => {
     if (!canvasRef.current || !visible || points.length === 0) return;
     // Radius in pixels = half the grid spacing at current zoom
-    // Grid is ~0.15° apart; convert to pixels at current zoom
     const p1 = map.latLngToContainerPoint([9, 38]);
     const p2 = map.latLngToContainerPoint([9.15, 38]);
     const gridPixels = Math.abs(p2.y - p1.y);
