@@ -40,11 +40,11 @@ npm run build
 
 ```bash
 ssh ec2-user@<instance>
-cd /app/EthopAI
+cd /app/EthiopAI
 git pull origin master
 npm install
 npm run build
-pm2 restart ethopai
+pm2 restart EthiopAI
 ```
 
 Or via the setup script:
@@ -68,3 +68,4 @@ bash infra/full-setup-aws.sh
 3. Register the layer in the API route (`app/api/layers/`)
 4. Add the layer toggle to the map UI component
 5. Run `npm run precompute` to generate the layer data
+

@@ -1,8 +1,8 @@
-# EthopAI — AWS Services Architecture
+# EthiopAI — AWS Services Architecture
 
 ## Overview
 
-EthopAI is an interactive ecological mapping platform for Ethiopia that helps NGOs and investors identify high-priority areas for ecosystem restoration and carbon credit projects. The platform uses multiple AWS services to power AI-driven analysis, data processing, and serverless computation.
+EthiopAI is an interactive ecological mapping platform for Ethiopia that helps NGOs and investors identify high-priority areas for ecosystem restoration and carbon credit projects. The platform uses multiple AWS services to power AI-driven analysis, data processing, and serverless computation.
 
 ---
 
@@ -30,7 +30,7 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 
 **What it does:** Caches AI responses so repeated queries are instant instead of waiting 5-10 seconds for Bedrock.
 
-**Table:** `ethopai-recommendations`
+**Table:** `EthiopAI-recommendations`
 
 **Region:** us-west-2
 
@@ -52,7 +52,7 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 
 **What it does:** Runs the ML detail service that enriches map cells with live external data when users zoom in.
 
-**Function:** `ethopai-ml-detail`
+**Function:** `EthiopAI-ml-detail`
 
 **Region:** us-west-2
 
@@ -76,7 +76,7 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 
 **What it does:** Exposes the Lambda function as a public HTTPS endpoint.
 
-**API:** `ethopai-detail-api`
+**API:** `EthiopAI-detail-api`
 
 **API ID:** `k7jyplmxjd`
 
@@ -96,7 +96,7 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 
 **What it does:** Stores training data and model artifacts for the ML pipeline.
 
-**Bucket:** `ethopai-ml-data-123965497004`
+**Bucket:** `EthiopAI-ml-data-123965497004`
 
 **Region:** us-west-2
 
@@ -121,7 +121,7 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 - Training time: ~5-10 minutes
 
 **Inference endpoint:**
-- Name: `ethopai-priority-endpoint`
+- Name: `EthiopAI-priority-endpoint`
 - Instance: ml.t2.medium
 - Accepts JSON batches of grid cells, returns priority predictions
 
@@ -139,7 +139,7 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 
 **Setup:**
 - Application: Next.js with PM2 process manager
-- Domain: `ethopai.uberf.vip` (via Cloudflare DNS + AWS ALB + ACM cert)
+- Domain: `EthiopAI.uberf.vip` (via Cloudflare DNS + AWS ALB + ACM cert)
 - Git-based deployment: `git pull && npm run build && pm2 restart`
 
 ---
@@ -147,13 +147,13 @@ EthopAI is an interactive ecological mapping platform for Ethiopia that helps NG
 ### 8. AWS IAM (Security — Identity & Access)
 
 **Roles created:**
-- `ethopai-lambda-role` — Allows Lambda execution + CloudWatch Logs
+- `EthiopAI-lambda-role` — Allows Lambda execution + CloudWatch Logs
 - `WSParticipantRole` — Used by EC2 and for SageMaker PassRole
 
 **Permissions:**
 - Bedrock InvokeModel (Claude Sonnet 4.6)
-- DynamoDB GetItem/PutItem on `ethopai-recommendations`
-- S3 read/write on `ethopai-ml-data-*`
+- DynamoDB GetItem/PutItem on `EthiopAI-recommendations`
+- S3 read/write on `EthiopAI-ml-data-*`
 - Lambda execution
 - SageMaker (training jobs, endpoints)
 
@@ -236,5 +236,6 @@ node src/deploy-sagemaker.js
 cd services/ml-detail && bash deploy.sh
 
 # 6. Build and serve
-cd ~/EthopAI && npm run build && pm2 restart 0 --update-env
+cd ~/EthiopAI && npm run build && pm2 restart 0 --update-env
 ```
+

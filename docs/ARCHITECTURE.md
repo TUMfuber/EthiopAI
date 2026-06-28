@@ -66,3 +66,4 @@ Services are provisioned via scripts in `infra/`. Key integrations:
 - **EC2/ALB** — Next.js application hosting
 
 See [AWS_SERVICES.md](../AWS_SERVICES.md) for full infrastructure documentation.
+

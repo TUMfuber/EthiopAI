@@ -1,17 +1,17 @@
-# EthopAI Deployment Guide
+# EthiopAI Deployment Guide
 
 ## Architecture
 
 ```
 ┌──────────────┐    ┌─────────┐    ┌────────────────────┐    ┌──────────┐
 │ Satellite    │───▶│   S3    │───▶│ SageMaker Training │───▶│ Endpoint │
-│ Data (NDVI,  │    │ ethopai │    │ (PyTorch)          │    │          │
+│ Data (NDVI,  │    │ EthiopAI │    │ (PyTorch)          │    │          │
 │ Sentinel-2)  │    │ -ml-data│    └────────────────────┘    └────┬─────┘
 └──────────────┘    └─────────┘                                   │
                                                                   ▼
 ┌──────────┐    ┌─────────────┐    ┌──────────────────┐    ┌──────────┐
 │    UI    │◀───│ Next.js API │◀───│    Bedrock        │◀───│ Priority │
-│ (Leaflet)│    │ (ethopai.   │    │ (Claude insights) │    │ Scores   │
+│ (Leaflet)│    │ (EthiopAI.   │    │ (Claude insights) │    │ Scores   │
 │          │    │  uberf.vip) │    └──────────────────┘    └──────────┘
 └──────────┘    └─────────────┘
 ```
@@ -71,7 +71,7 @@ cp output/priority-heatmap.geojson ../../public/data/
 ```bash
 cd ../../
 npm run build
-pm2 restart ethopai
+pm2 restart EthiopAI
 ```
 
 ## Teardown
@@ -81,3 +81,4 @@ bash infra/teardown-aws.sh
 ```
 
 Removes all AWS resources created by setup-aws.sh.
+

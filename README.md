@@ -1,4 +1,4 @@
-# 🌍 EthopAI
+# 🌍 EthiopAI
 
 **AI-powered ecological restoration planning platform for Ethiopia**
 
@@ -6,9 +6,9 @@
 
 ![Screenshot](docs/screenshot.png)
 
-## What is EthopAI?
+## What is EthiopAI?
 
-EthopAI helps NGOs and investors identify optimal locations for ecological restoration across Ethiopia. The platform combines satellite imagery, carbon credit registry data, and AI analysis to score regions by restoration potential. Users can explore priority maps, receive AI-powered recommendations, and take action by connecting with funding entities and local partners.
+EthiopAI helps NGOs and investors identify optimal locations for ecological restoration across Ethiopia. The platform combines satellite imagery, carbon credit registry data, and AI analysis to score regions by restoration potential. Users can explore priority maps, receive AI-powered recommendations, and take action by connecting with funding entities and local partners.
 
 ## Features
 
@@ -41,8 +41,8 @@ EthopAI helps NGOs and investors identify optimal locations for ecological resto
 ### Setup
 
 ```bash
-git clone https://github.com/your-org/EthopAI.git
-cd EthopAI
+git clone https://github.com/your-org/EthiopAI.git
+cd EthiopAI
 npm install
 bash setup.sh
 npm run dev
@@ -87,3 +87,4 @@ Carbon Credit Registries (Verra, Gold Standard, ACR, Plan Vivo, Berkeley DB)
 ## License
 
 MIT
+
