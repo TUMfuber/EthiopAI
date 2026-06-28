@@ -26,24 +26,28 @@ function drawHeatmap(canvas: HTMLCanvasElement, map: L.Map, points: HeatPoint[],
   ctx.clearRect(0, 0, size.x, size.y);
 
   const bounds = map.getBounds();
-  const pad = 2; // degrees padding
-  const visiblePoints = points.filter(p =>
-    p.lat >= bounds.getSouth() - pad && p.lat <= bounds.getNorth() + pad &&
-    p.lng >= bounds.getWest() - pad && p.lng <= bounds.getEast() + pad
-  );
+  const zoom = map.getZoom();
+  // At low zoom, skip points to keep max ~500 rendered
+  const step = zoom >= 8 ? 1 : zoom >= 7 ? 2 : zoom >= 6 ? 4 : 8;
 
-  for (const p of visiblePoints) {
+  let count = 0;
+  for (let i = 0; i < points.length; i += step) {
+    const p = points[i];
+    if (p.lat < bounds.getSouth() || p.lat > bounds.getNorth() ||
+        p.lng < bounds.getWest() || p.lng > bounds.getEast()) continue;
+
     const px = map.latLngToContainerPoint([p.lat, p.lng]);
     const [r, g, b] = valueToRGB(p.value);
     const alpha = Math.min(0.65, 0.3 + p.value * 0.4);
     const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, radius);
     grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
-    grad.addColorStop(0.6, `rgba(${r},${g},${b},${alpha * 0.5})`);
+    grad.addColorStop(0.7, `rgba(${r},${g},${b},${alpha * 0.3})`);
     grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(px.x, px.y, radius, 0, Math.PI * 2);
     ctx.fill();
+    count++;
   }
 }
 
