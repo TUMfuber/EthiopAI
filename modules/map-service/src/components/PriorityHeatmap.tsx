@@ -41,7 +41,7 @@ export default function PriorityHeatmap({ visible }: { visible: boolean }) {
       data={data}
       style={(feature: any) => {
         const color = interpolateColor(feature?.properties?.priority ?? 0);
-        return { fillColor: color, fillOpacity: 0.55, color: color, weight: 1, opacity: 0.7 };
+        return { fillColor: color, fillOpacity: 0.55, color: color, weight: 0, opacity: 0 };
       }}
       onEachFeature={(feature, layer) => {
         const p = feature.properties;
