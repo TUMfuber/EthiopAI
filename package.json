@@ -9,6 +9,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
+    "setup": "bash setup.sh",
     "dev": "next dev",
     "precompute": "scripts/.venv/bin/python scripts/precompute_layers.py",
     "build": "next build",

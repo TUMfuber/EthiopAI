@@ -754,8 +754,7 @@ export default function EthiopiaMap({
           />
         )}
 
-        {priorityZones && <PriorityOverlays zones={priorityZones} />}
-        {projects && <ProjectMarkers projects={projects} />}
+        {/* Projects shown via cluster/points system */}
 
         {/* Location layer */}
         {locationMode === 'clustered' && filteredClusterNodes.length > 0 && (
