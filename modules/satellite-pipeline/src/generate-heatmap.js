@@ -35,14 +35,15 @@ for (const f of mainGrid.features) {
   const dLng = (maxLng - minLng) / SUBDIVIDE;
   const dLat = (maxLat - minLat) / SUBDIVIDE;
 
-  // Compute category scores (0-1)
+  // Compute category scores (0-1) — use actual scores if available, else derive
   const scores = {
     biodiversity: maxBio > 0 ? (p.biodiversity_livelihood_score ?? 0) / maxBio : 0,
-    // Carbon proxy: climate suitability + tree fraction potential (areas with low trees but high suitability = carbon opportunity)
-    carbon: Math.min(1, ((p.climate_suitability ?? 0) / (maxClimate || 1)) * 0.5 + (1 - (p.tree_fraction ?? 0)) * (p.landcover_eligibility ?? 0) * 0.5),
-    // Water proxy: rainfall + slope interaction (high rain + steep slope = erosion risk = water priority)
-    water: Math.min(1, ((p.seasonal_rainfall_mm ?? 0) / (maxRain || 1)) * 0.6 + ((p.slope_p90 ?? 0) / 30) * 0.4),
-    land_degradation: maxLand > 0 ? (p.degraded_restorable_land_score ?? 0) / maxLand : (p.bare_sparse_fraction ?? 0),
+    carbon: (p.carbon_recovery_score ?? 0) / 100 || Math.min(1, ((p.climate_suitability ?? 0) / (maxClimate || 1)) * 0.5 + (1 - (p.tree_fraction ?? 0)) * (p.landcover_eligibility ?? 0) * 0.5),
+    water: (p.water_erosion_score ?? 0) / 100 || Math.min(1, ((p.seasonal_rainfall_mm ?? 0) / (maxRain || 1)) * 0.6 + ((p.slope_p90 ?? 0) / 30) * 0.4),
+    land_degradation: Math.max(
+      maxLand > 0 ? (p.degraded_restorable_land_score ?? 0) / maxLand : 0,
+      (p.bare_sparse_fraction ?? 0) * 0.6 + (1 - (p.tree_fraction ?? 0)) * (p.cropland_fraction ?? 0) * 0.4
+    ),
   };
 
   // Composite
