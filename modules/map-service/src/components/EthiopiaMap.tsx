@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, useMap, useMapEvent } from 'react-leaflet';
 import ClusterLayer, { type ClusterColorMode, type ClusterNode, type LeafNode, weightToColor } from './ClusterLayer';
 import EthopaiLayerRenderer from './EthopaiLayerRenderer';
@@ -8,18 +8,32 @@ import { buildEthiopiaExample } from './ethiopiaExample';
 import PriorityOverlays, { type PriorityZones } from './PriorityOverlays';
 import ProjectMarkers, { type Project } from './ProjectMarkers';
 import RawLayerRenderer from './RawLayerRenderer';
-import { DEFAULT_ETHOPAI_LAYER_ID, ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
+import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
 
 // ── Map modes ─────────────────────────────────────────────────────────────────
 
-type MapMode = 'standard' | 'satellite' | 'biodiversity' | 'livelihood';
+type MapMode =
+  | 'standard'
+  | 'restoration_priority_score'
+  | 'carbon_recovery_potential'
+  | 'water_erosion_benefit'
+  | 'degraded_restorable_land'
+  | 'biodiversity_livelihood_value';
 
-const MODES: { id: MapMode; icon: string }[] = [
-  { id: 'standard',     icon: '🗺️' },
-  { id: 'satellite',    icon: '🛰️' },
-  { id: 'biodiversity', icon: '🌿' },
-  { id: 'livelihood',   icon: '🌾' },
+function isEthopaiMode(m: MapMode): boolean {
+  return m !== 'standard';
+}
+
+type ModeGroup = 'base' | 'ethopai';
+
+const MODES: { id: MapMode; icon: string; group: ModeGroup; labelKey: string }[] = [
+  { id: 'standard',                      icon: '🗺️', group: 'base',    labelKey: 'modeStandard' },
+  { id: 'restoration_priority_score',    icon: '⭐', group: 'ethopai', labelKey: 'modeOverall' },
+  { id: 'carbon_recovery_potential',     icon: '🌳', group: 'ethopai', labelKey: 'modeCarbon' },
+  { id: 'water_erosion_benefit',         icon: '💧', group: 'ethopai', labelKey: 'modeWater' },
+  { id: 'degraded_restorable_land',      icon: '🏔️', group: 'ethopai', labelKey: 'modeLand' },
+  { id: 'biodiversity_livelihood_value', icon: '🦋', group: 'ethopai', labelKey: 'modeBiodiv' },
 ];
 
 // ── Location modes ────────────────────────────────────────────────────────────
@@ -59,9 +73,11 @@ const TRANSLATIONS = {
     selectAll: 'Select all',
     deselectAll: 'Deselect all',
     modeStandard: 'Standard',
-    modeSatellite: 'Satellite',
-    modeBiodiversity: 'Biodiversity',
-    modeLivelihood: 'Livelihood',
+    modeOverall: 'Overall',
+    modeCarbon: 'Carbon',
+    modeWater: 'Water',
+    modeLand: 'Land',
+    modeBiodiv: 'Biodiversity',
   },
   es: {
     settings: 'Configuración',
@@ -84,9 +100,11 @@ const TRANSLATIONS = {
     selectAll: 'Seleccionar todo',
     deselectAll: 'Deseleccionar todo',
     modeStandard: 'Estándar',
-    modeSatellite: 'Satélite',
-    modeBiodiversity: 'Biodiversidad',
-    modeLivelihood: 'Sustento',
+    modeOverall: 'General',
+    modeCarbon: 'Carbono',
+    modeWater: 'Agua',
+    modeLand: 'Tierra',
+    modeBiodiv: 'Biodiversidad',
   },
   de: {
     settings: 'Einstellungen',
@@ -109,9 +127,11 @@ const TRANSLATIONS = {
     selectAll: 'Alle auswählen',
     deselectAll: 'Alle abwählen',
     modeStandard: 'Standard',
-    modeSatellite: 'Satellit',
-    modeBiodiversity: 'Artenvielfalt',
-    modeLivelihood: 'Lebensunterhalt',
+    modeOverall: 'Gesamt',
+    modeCarbon: 'Kohlenstoff',
+    modeWater: 'Wasser',
+    modeLand: 'Boden',
+    modeBiodiv: 'Artenvielfalt',
   },
   am: {
     settings: 'ቅንብሮች',
@@ -134,9 +154,11 @@ const TRANSLATIONS = {
     selectAll: 'ሁሉንም ምረጥ',
     deselectAll: 'ሁሉንም አቋርጥ',
     modeStandard: 'መደበኛ',
-    modeSatellite: 'ሳተላይት',
-    modeBiodiversity: 'ብዝሃ ሕይወት',
-    modeLivelihood: 'ኑሮ',
+    modeOverall: 'አጠቃላይ',
+    modeCarbon: 'ካርቦን',
+    modeWater: 'ውሃ',
+    modeLand: 'ምድር',
+    modeBiodiv: 'ብዝሃ ሕይወት',
   },
 } as const;
 
@@ -144,23 +166,9 @@ type TKey = keyof typeof TRANSLATIONS.en;
 
 // ── Tile layers ───────────────────────────────────────────────────────────────
 
-const TILE_LAYERS: Record<MapMode, { url: string; attribution: string }> = {
-  standard: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors | Ethiopia boundary: geoBoundaries',
-  },
-  satellite: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors | Ethiopia boundary: geoBoundaries',
-  },
-  biodiversity: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors | Ethiopia boundary: geoBoundaries',
-  },
-  livelihood: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors | Ethiopia boundary: geoBoundaries',
-  },
+const BASE_TILE = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; OpenStreetMap contributors | Ethiopia boundary: geoBoundaries',
 };
 
 // ── Geo helpers ───────────────────────────────────────────────────────────────
@@ -285,8 +293,6 @@ export default function EthiopiaMap({
   const [locationMode, setLocationMode] = useState<LocationMode>('clustered');
   const [clusterColorMode, setClusterColorMode] = useState<ClusterColorMode>('average');
   const [regionFilterEnabled, setRegionFilterEnabled] = useState(true);
-  const [ethopaiLayersEnabled, setEthopaiLayersEnabled] = useState(true);
-  const [selectedEthopaiLayerId, setSelectedEthopaiLayerId] = useState(DEFAULT_ETHOPAI_LAYER_ID);
   const [loadedEthopaiLayerData, setLoadedEthopaiLayerData] = useState<Record<string, any>>({});
   const [rawLayerSelectorEnabled, setRawLayerSelectorEnabled] = useState(false);
   const [selectedRawLayerIds, setSelectedRawLayerIds] = useState<string[]>(visibleRawLayerIds);
@@ -327,28 +333,28 @@ export default function EthiopiaMap({
     setLoadedRawLayerData((current) => ({ ...current, ...rawLayerData }));
   }, [rawLayerData]);
 
-  const selectedEthopaiLayer = useMemo(
-    () => ETHOPAI_LAYERS.find((layer) => layer.id === selectedEthopaiLayerId) ?? ETHOPAI_LAYERS[0],
-    [selectedEthopaiLayerId],
+  const activeEthopaiLayer = useMemo(
+    () => isEthopaiMode(mode) ? ETHOPAI_LAYERS.find((l) => l.id === mode) : undefined,
+    [mode],
   );
 
   useEffect(() => {
-    if (!ethopaiLayersEnabled || !selectedEthopaiLayer || loadedEthopaiLayerData[selectedEthopaiLayer.id]) return;
+    if (!activeEthopaiLayer || loadedEthopaiLayerData[activeEthopaiLayer.id]) return;
 
     let active = true;
 
-    fetch(`/api/layers/${selectedEthopaiLayer.id}`)
+    fetch(`/api/layers/${activeEthopaiLayer.id}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!active || !data) return;
-        setLoadedEthopaiLayerData((current) => ({ ...current, [selectedEthopaiLayer.id]: data }));
+        setLoadedEthopaiLayerData((current) => ({ ...current, [activeEthopaiLayer.id]: data }));
       })
-      .catch((e) => console.error(`Failed to load EthopAI layer ${selectedEthopaiLayer.id}:`, e));
+      .catch((e) => console.error(`Failed to load EthopAI layer ${activeEthopaiLayer.id}:`, e));
 
     return () => {
       active = false;
     };
-  }, [ethopaiLayersEnabled, loadedEthopaiLayerData, selectedEthopaiLayer]);
+  }, [activeEthopaiLayer, loadedEthopaiLayerData]);
 
   useEffect(() => {
     const vectorLayerIds = rawLayers
@@ -397,9 +403,8 @@ export default function EthiopiaMap({
 
   // Region panel visible when the setting is on and regions are loaded
   const showRegionPanel = regionFilterEnabled && regionNames.length > 0;
-  const showEthopaiLayerPanel = ethopaiLayersEnabled && ETHOPAI_LAYERS.length > 0;
   const showRawLayerPanel = rawLayerSelectorEnabled && rawLayers.length > 0;
-  const rawPanelLeft = 16 + (showRegionPanel ? 194 : 0) + (showEthopaiLayerPanel ? 254 : 0);
+  const rawPanelLeft = 16 + (showRegionPanel ? 194 : 0);
 
   // Filter cluster nodes whose region is deselected (when panel is active)
   const filteredClusterNodes = useMemo(() => {
@@ -436,7 +441,7 @@ export default function EthiopiaMap({
     setSelectedRawLayerIds(allRawLayersSelected ? [] : rawLayers.map((layer) => layer.id));
   }
 
-  const tile = TILE_LAYERS[mode];
+  const tile = BASE_TILE;
 
   const locationModeOptions: { id: LocationMode; label: string; desc: string }[] = [
     { id: 'none',      label: t('locNone'),      desc: t('locNoneDesc') },
@@ -454,25 +459,30 @@ export default function EthiopiaMap({
         background: 'white', borderRadius: 10, padding: 5,
         boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
       }}>
-        {MODES.map((m) => {
-          const label = t(`mode${m.id.charAt(0).toUpperCase()}${m.id.slice(1)}` as TKey);
+        {MODES.map((m, idx) => {
+          const label = t(m.labelKey as TKey);
+          const showDivider = idx > 0 && m.group !== MODES[idx - 1].group;
           return (
-            <button
-              key={m.id}
-              title={label}
-              onClick={() => setMode(m.id)}
-              aria-label={label}
-              aria-pressed={mode === m.id}
-              style={{
-                width: 38, height: 38, border: 'none', borderRadius: 7,
-                cursor: 'pointer', fontSize: 20, lineHeight: 1,
-                background: mode === m.id ? '#dcfce7' : 'transparent',
-                outline: mode === m.id ? '2px solid #16a34a' : '2px solid transparent',
-                transition: 'background 0.15s, outline 0.15s',
-              }}
-            >
-              {m.icon}
-            </button>
+            <Fragment key={m.id}>
+              {showDivider && (
+                <div style={{ height: 1, background: '#e5e7eb', margin: '2px 0' }} />
+              )}
+              <button
+                title={label}
+                onClick={() => setMode(m.id)}
+                aria-label={label}
+                aria-pressed={mode === m.id}
+                style={{
+                  width: 38, height: 38, border: 'none', borderRadius: 7,
+                  cursor: 'pointer', fontSize: 20, lineHeight: 1,
+                  background: mode === m.id ? '#dcfce7' : 'transparent',
+                  outline: mode === m.id ? '2px solid #16a34a' : '2px solid transparent',
+                  transition: 'background 0.15s, outline 0.15s',
+                }}
+              >
+                {m.icon}
+              </button>
+            </Fragment>
           );
         })}
       </div>
@@ -578,20 +588,6 @@ export default function EthiopiaMap({
 
           <div style={{ height: 1, background: '#f3f4f6', margin: '12px 0' }} />
 
-          {/* EthopAI layers */}
-          <div style={SECTION_HEADER}>{t('ethopaiLayers')}</div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={ethopaiLayersEnabled}
-              onChange={(e) => setEthopaiLayersEnabled(e.target.checked)}
-              style={{ accentColor: '#16a34a', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }}
-            />
-            <span style={{ fontSize: 12, color: '#374151' }}>{t('ethopaiLayersDesc')}</span>
-          </label>
-
-          <div style={{ height: 1, background: '#f3f4f6', margin: '12px 0' }} />
-
           {/* Raw layer selection */}
           <div style={SECTION_HEADER}>{t('rawLayers')}</div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
@@ -650,36 +646,6 @@ export default function EthiopiaMap({
             <label key={name} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: 12, color: '#374151', userSelect: 'none' }}>
               <input type="checkbox" checked={selectedRegions.has(name)} onChange={() => toggleRegion(name)} style={{ accentColor: '#16a34a', cursor: 'pointer' }} />
               {name}
-            </label>
-          ))}
-        </div>
-      )}
-
-      {/* ── EthopAI layer selector — visible when enabled in settings ─────── */}
-      {showEthopaiLayerPanel && (
-        <div style={{
-          position: 'absolute', top: 16, left: showRegionPanel ? 210 : 16, zIndex: 1000,
-          background: 'white', borderRadius: 10, padding: '10px 12px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
-          maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', width: 238,
-        }}>
-          <div style={{ fontFamily: 'system-ui,sans-serif', fontWeight: 600, fontSize: 13, color: '#111827', marginBottom: 8 }}>
-            {t('ethopaiLayers')}
-          </div>
-          {ETHOPAI_LAYERS.map((layer) => (
-            <label key={layer.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '5px 0', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: 12, color: '#374151', userSelect: 'none' }}>
-              <input
-                type="radio"
-                name="ethopaiLayer"
-                value={layer.id}
-                checked={selectedEthopaiLayerId === layer.id}
-                onChange={() => setSelectedEthopaiLayerId(layer.id)}
-                style={{ accentColor: '#16a34a', cursor: 'pointer', marginTop: 1, flexShrink: 0 }}
-              />
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', color: '#111827', fontWeight: 600, lineHeight: 1.25 }}>{layer.name}</span>
-                <span style={{ display: 'block', color: '#9ca3af', fontSize: 11, lineHeight: 1.25, marginTop: 2 }}>{layer.subtitle}</span>
-              </span>
             </label>
           ))}
         </div>
@@ -771,10 +737,10 @@ export default function EthiopiaMap({
           vectorData={loadedRawLayerData}
         />
 
-        {ethopaiLayersEnabled && selectedEthopaiLayer && (
+        {activeEthopaiLayer && (
           <EthopaiLayerRenderer
-            layer={selectedEthopaiLayer}
-            data={loadedEthopaiLayerData[selectedEthopaiLayer.id]}
+            layer={activeEthopaiLayer}
+            data={loadedEthopaiLayerData[activeEthopaiLayer.id]}
           />
         )}
 
