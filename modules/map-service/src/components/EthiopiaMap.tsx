@@ -792,7 +792,6 @@ export default function EthiopiaMap({
           <RawPointsLayer leaves={flatLeaves} />
         )}
 
-        <PriorityHeatmap visible={priorityActive} />
         <DetailLayer visible={priorityActive} />
         <ActionPointMarkers points={actionPoints} />
         <DropMarker active={dropMode} onDrop={(lat, lng) => { setDroppedPin({ lat, lng }); setDropMode(false); }} />
