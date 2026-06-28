@@ -30,8 +30,16 @@ function loadTopZones(filters: string[]) {
   const raw = readFileSync(join(process.cwd(), 'public/data/priority-heatmap.geojson'), 'utf-8');
   const geojson = JSON.parse(raw);
   const features: any[] = geojson.features ?? [];
-  const filtered = filters.length > 0
-    ? features.filter((f: any) => filters.some(cat => f.properties.category?.toLowerCase() === cat))
+  const filterMap: Record<string, string[]> = {
+    soil: ['land_degradation', 'soil'],
+    water: ['water'],
+    carbon: ['carbon'],
+    biodiversity: ['biodiversity'],
+  };
+  const expandedFilters = filters.flatMap(f => filterMap[f] ?? [f]);
+
+  const filtered = expandedFilters.length > 0
+    ? features.filter((f: any) => expandedFilters.some(cat => f.properties.category?.toLowerCase() === cat))
     : features;
   const sorted = filtered
     .sort((a: any, b: any) => (b.properties.priority ?? 0) - (a.properties.priority ?? 0))
