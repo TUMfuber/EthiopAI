@@ -1,12 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CircleMarker } from 'react-leaflet';
-
-interface Feature {
-  geometry: { coordinates: [number, number] };
-  properties: { priority: number; [k: string]: any };
-}
+import { GeoJSON } from 'react-leaflet';
 
 function interpolateColor(priority: number): string {
   const stops = [
@@ -18,11 +13,7 @@ function interpolateColor(priority: number): string {
   const p = Math.max(0, Math.min(1, priority));
   let lower = stops[0], upper = stops[stops.length - 1];
   for (let i = 0; i < stops.length - 1; i++) {
-    if (p >= stops[i].val && p <= stops[i + 1].val) {
-      lower = stops[i];
-      upper = stops[i + 1];
-      break;
-    }
+    if (p >= stops[i].val && p <= stops[i + 1].val) { lower = stops[i]; upper = stops[i + 1]; break; }
   }
   const t = upper.val === lower.val ? 0 : (p - lower.val) / (upper.val - lower.val);
   const r = Math.round(lower.r + t * (upper.r - lower.r));
@@ -32,32 +23,33 @@ function interpolateColor(priority: number): string {
 }
 
 export default function PriorityHeatmap({ visible }: { visible: boolean }) {
-  const [features, setFeatures] = useState<Feature[]>([]);
+  const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    if (!visible || features.length > 0) return;
+    if (!visible || data) return;
     fetch('/data/priority-heatmap.geojson')
-      .then((r) => r.json())
-      .then((data) => setFeatures(data.features ?? []))
+      .then(r => r.json())
+      .then(setData)
       .catch(console.error);
-  }, [visible, features.length]);
+  }, [visible, data]);
 
-  if (!visible) return null;
+  if (!visible || !data) return null;
 
   return (
-    <>
-      {features.map((f, i) => {
-        const [lng, lat] = f.geometry.coordinates;
-        const color = interpolateColor(f.properties.priority);
-        return (
-          <CircleMarker
-            key={i}
-            center={[lat, lng]}
-            radius={4}
-            pathOptions={{ color, fillColor: color, fillOpacity: 0.8, weight: 1 }}
-          />
+    <GeoJSON
+      key="priority-heatmap"
+      data={data}
+      style={(feature: any) => {
+        const color = interpolateColor(feature?.properties?.priority ?? 0);
+        return { fillColor: color, fillOpacity: 0.55, color: color, weight: 1, opacity: 0.7 };
+      }}
+      onEachFeature={(feature, layer) => {
+        const p = feature.properties;
+        layer.bindTooltip(
+          `<b>${p.location}</b><br/>Priority: ${(p.priority * 100).toFixed(0)}%<br/>Category: ${p.category}`,
+          { sticky: true }
         );
-      })}
-    </>
+      }}
+    />
   );
 }

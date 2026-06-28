@@ -21,7 +21,7 @@ function badgeColor(p: number): string {
   return '#16a34a';
 }
 
-export default function RecommendationPanel({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export default function RecommendationPanel({ visible, onClose, onResults }: { visible: boolean; onClose: () => void; onResults?: (pts: any[]) => void }) {
   const [active, setActive] = useState<Set<string>>(new Set(['Biodiversity', 'Carbon']));
   const [items, setItems] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,7 +37,7 @@ export default function RecommendationPanel({ visible, onClose }: { visible: boo
     setLoading(true);
     try {
       const res = await fetch(`/api/recommendations?filters=${[...active].map(s => s.toLowerCase()).join(',')}`);
-      if (res.ok) setItems(await res.json());
+      if (res.ok) { const data = await res.json(); setItems(data); onResults?.(data.filter((d: any) => d.lat && d.lng)); }
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [active]);

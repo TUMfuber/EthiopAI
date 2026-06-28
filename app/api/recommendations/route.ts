@@ -11,7 +11,7 @@ function loadTopZones(filters: string[]) {
   const features: any[] = geojson.features ?? [];
 
   const filtered = filters.length > 0
-    ? features.filter((f: any) => filters.some((cat) => f.properties.category?.toLowerCase() === cat))
+    ? features.filter((f: any) => filters.some(cat => f.properties.category?.toLowerCase() === cat))
     : features;
 
   return filtered
@@ -20,30 +20,33 @@ function loadTopZones(filters: string[]) {
     .map((f: any) => ({
       priority: f.properties.priority,
       category: f.properties.category,
-      location: f.properties.location ?? f.properties.name ?? 'Unknown',
-      coordinates: f.geometry.coordinates,
+      location: f.properties.location ?? 'Unknown',
+      lat: f.properties.lat,
+      lng: f.properties.lng,
     }));
 }
 
 export async function GET(request: NextRequest) {
   const filters = (request.nextUrl.searchParams.get('filters') ?? '')
-    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
   const zones = loadTopZones(filters);
 
-  const prompt = `You are an ecological intervention advisor for Ethiopia. Given these top priority zones, recommend specific ecological interventions. For each zone, suggest one intervention from: reforestation, wetland restoration, soil rehabilitation, agroforestry, terracing, or watershed management.
+  const prompt = `You are an ecological intervention advisor for Ethiopia. Given these high-priority zones, recommend ONE specific intervention per zone. Be precise about what to do at each exact location.
 
-Priority Zones:
+Priority Zones (with coordinates):
 ${JSON.stringify(zones, null, 2)}
 
-Return a JSON array (no other text) with exactly ${zones.length} objects, each having:
-- id: unique string
-- priority: number (from zone data)
-- title: short action title
-- description: 1-2 sentence description of the intervention
-- impact: estimated carbon credit potential or ecological benefit (e.g. "~500 tCO2e/yr")
-- location: zone location name
-- category: the filter category (biodiversity/carbon/soil/water)`;
+Return a JSON array (no other text) with exactly ${zones.length} objects:
+- id: unique string (e.g. "rec-1")
+- priority: number from zone
+- title: short action (e.g. "Reforestation - Native Juniperus")
+- description: 1-2 sentences about the specific intervention
+- impact: estimated benefit (e.g. "~2,500 tCO2e/yr" or "Restore 500ha wetland habitat")
+- location: zone name from input
+- category: from input
+- lat: exact latitude from zone
+- lng: exact longitude from zone`;
 
   try {
     const command = new InvokeModelCommand({
@@ -65,10 +68,7 @@ Return a JSON array (no other text) with exactly ${zones.length} objects, each h
 
     return NextResponse.json(recommendations);
   } catch (error: any) {
-    console.error('Bedrock error:', error);
-    return NextResponse.json(
-      [{ id: '1', priority: 0.9, title: 'Service unavailable', description: 'AI recommendations temporarily unavailable.', impact: 'N/A', location: 'N/A', category: filters[0] ?? 'general' }],
-      { status: 200 },
-    );
+    console.error('Bedrock error:', error?.message ?? error);
+    return NextResponse.json([], { status: 200 });
   }
 }

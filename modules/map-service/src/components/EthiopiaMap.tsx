@@ -10,6 +10,7 @@ import ProjectMarkers, { type Project } from './ProjectMarkers';
 import PriorityHeatmap from './PriorityHeatmap';
 import RecommendationPanel from './RecommendationPanel';
 import PriorityToggle from './PriorityToggle';
+import ActionPointMarkers, { type ActionPoint } from './ActionPointMarkers';
 import RawLayerRenderer from './RawLayerRenderer';
 import { ETHOPAI_LAYERS } from '../layers/ethopaiLayers';
 import { RAW_LAYERS, type RawLayerConfig } from '../layers/rawLayers';
@@ -303,6 +304,7 @@ export default function EthiopiaMap({
   const [language, setLanguage] = useState<Language>('en');
   const [showSettings, setShowSettings] = useState(false);
   const [priorityActive, setPriorityActive] = useState(false);
+  const [actionPoints, setActionPoints] = useState<ActionPoint[]>([]);
 
   const t = (key: TKey) => TRANSLATIONS[language][key];
 
@@ -775,10 +777,11 @@ export default function EthiopiaMap({
         )}
 
         <PriorityHeatmap visible={priorityActive} />
+        <ActionPointMarkers points={actionPoints} />
       </MapContainer>
 
       <PriorityToggle active={priorityActive} onToggle={() => setPriorityActive((v) => !v)} />
-      <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} />
+      <RecommendationPanel visible={priorityActive} onClose={() => setPriorityActive(false)} onResults={setActionPoints} />
     </section>
   );
 }
