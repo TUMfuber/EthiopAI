@@ -3,7 +3,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const bedrock = new BedrockRuntimeClient({ region: 'eu-central-1' });
+const bedrock = new BedrockRuntimeClient({ region: 'us-west-2' });
 
 function loadTopZones(filters: string[]) {
   const raw = readFileSync(join(process.cwd(), 'public/data/priority-heatmap.geojson'), 'utf-8');
@@ -47,7 +47,7 @@ Return a JSON array (no other text) with exactly ${zones.length} objects, each h
 
   try {
     const command = new InvokeModelCommand({
-      modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+      modelId: 'us.anthropic.claude-sonnet-4-6',
       contentType: 'application/json',
       accept: 'application/json',
       body: JSON.stringify({

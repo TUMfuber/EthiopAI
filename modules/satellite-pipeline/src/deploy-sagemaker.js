@@ -7,16 +7,16 @@ import {
   DescribeTrainingJobCommand
 } from "@aws-sdk/client-sagemaker";
 
-const REGION = "eu-central-1";
-const ROLE_ARN = process.env.SAGEMAKER_ROLE_ARN;
+const REGION = "us-west-2";
+const ROLE_ARN = process.env.SAGEMAKER_ROLE_ARN || "arn:aws:iam::123965497004:role/WSParticipantRole";
 const PREFIX = "ethopai-priority";
 const TIMESTAMP = Date.now();
 const JOB_NAME = `${PREFIX}-${TIMESTAMP}`;
 const MODEL_NAME = `${PREFIX}-model-${TIMESTAMP}`;
 const ENDPOINT_CONFIG = `${PREFIX}-config-${TIMESTAMP}`;
 const ENDPOINT_NAME = "ethopai-priority-endpoint";
-const IMAGE = "763104351884.dkr.ecr.eu-central-1.amazonaws.com/pytorch-training:2.0-cpu-py310";
-const INFERENCE_IMAGE = "763104351884.dkr.ecr.eu-central-1.amazonaws.com/pytorch-inference:2.0-cpu-py310";
+const IMAGE = "763104351884.dkr.ecr.us-west-2.amazonaws.com/pytorch-training:2.0-cpu-py310";
+const INFERENCE_IMAGE = "763104351884.dkr.ecr.us-west-2.amazonaws.com/pytorch-inference:2.0-cpu-py310";
 
 const client = new SageMakerClient({ region: REGION });
 

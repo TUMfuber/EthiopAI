@@ -1,7 +1,7 @@
 import { SageMakerRuntimeClient, InvokeEndpointCommand } from "@aws-sdk/client-sagemaker-runtime";
 import { writeFileSync, mkdirSync } from "fs";
 
-const REGION = "eu-central-1";
+const REGION = "us-west-2";
 const ENDPOINT_NAME = "ethopai-priority-endpoint";
 const client = new SageMakerRuntimeClient({ region: REGION });
 
